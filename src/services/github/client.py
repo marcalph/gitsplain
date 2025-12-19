@@ -1,12 +1,13 @@
 import base64
 import requests
-from typing import Dict, Optional
+from typing import Any, Dict, Optional, List
 from urllib.parse import urlparse
 from dataclasses import dataclass
 
 
 @dataclass
 class GitHubRepository:
+    files: List[str]
     tree_structure: Dict[str, str]
     readMe: str
 
@@ -93,39 +94,6 @@ class GitHubFileTree:
 
         return root
 
-    def print_tree(
-        self,
-        tree: Dict,
-        prefix: str = "",
-        is_last: bool = True,
-        show_types: bool = False,
-    ):
-        """
-        Affiche l'arbre de fichiers de manière formatée
-        """
-        items = sorted(tree.items())
-
-        for i, (name, data) in enumerate(items):
-            is_last_item = i == len(items) - 1
-
-            # Symboles pour l'arbre
-            connector = "└── " if is_last_item else "├── "
-
-            # Ajoute un symbole selon le type
-            if data["type"] == "tree":
-                symbol = "📁 " if not show_types else "📁 [dir] "
-            else:
-                symbol = "📄 " if not show_types else "📄 [file] "
-
-            print(f"{prefix}{connector}{symbol}{name}")
-
-            # Si c'est un dossier avec des enfants, affiche récursivement
-            if data["type"] == "tree" and "children" in data:
-                extension = "    " if is_last_item else "│   "
-                self.print_tree(
-                    data["children"], prefix + extension, is_last_item, show_types
-                )
-
     def generate_filetree(self, github_url: str, show_types: bool = False) -> Dict:
         """
         Génère et affiche l'arbre de fichiers à partir d'une URL GitHub
@@ -152,10 +120,6 @@ class GitHubFileTree:
 
         # Construit la structure
         tree_structure = self.build_tree_structure(tree_data)
-
-        # Affiche l'arbre
-        print(f"🌳 Arborescence de {owner}/{repo}:\n")
-        self.print_tree(tree_structure, show_types=show_types)
 
         return tree_structure
 
@@ -195,6 +159,37 @@ class GitHubFileTree:
 
         return content
 
+    def build_simple_tree_structure(self, tree_data) -> Dict[str, Any]:
+        # Construire la structure simplifiée
+        result: Dict[str, Any] = {}
+
+        for item in tree_data.get("tree", []):
+            path = item["path"]
+            item_type = item["type"]
+
+            parts = path.split("/")
+            current = result
+
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:
+                    # Dernier élément
+                    if item_type == "tree":
+                        # C'est un dossier
+                        folder_name = part + "/"
+                        if folder_name not in current:
+                            current[folder_name] = {}
+                    else:
+                        # C'est un fichier
+                        current[part] = None
+                else:
+                    # Dossier intermédiaire
+                    folder_name = part + "/"
+                    if folder_name not in current:
+                        current[folder_name] = {}
+                    current = current[folder_name]
+
+        return result
+
     def get_simple_tree_structure(self, github_url: str) -> GitHubRepository:
         """
         Récupère l'arbre de fichiers à partir d'une URL GitHub
@@ -203,13 +198,9 @@ class GitHubFileTree:
         branch = self.get_default_branch(owner, repo)
         tree_data = self.get_tree(owner, repo, branch)
         files = [_["path"] for _ in tree_data["tree"] if _["type"] == "blob"]
+        tree_structure = self.build_simple_tree_structure(tree_data)
         readMe = self.get_file_content(owner, repo, "README.md", branch)
 
-        repo = GitHubRepository(tree_structure=files, readMe=readMe)
-        return repo
-
-
-client = GitHubFileTree(github_token=None)
-resp = client.get_simple_tree_structure(
-    "https://github.com/ahmedkhaleel2004/gitdiagram"
-)
+        return GitHubRepository(
+            files=files, tree_structure=tree_structure, readMe=readMe
+        )
