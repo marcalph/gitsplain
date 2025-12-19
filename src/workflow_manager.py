@@ -2,64 +2,38 @@
 
 import time
 from typing import Any, Dict, Optional, Protocol
+from src.services.github.service import get_github_client
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from src.services.llm import LLMClient
+from src.services.github.client import GitHubFileTree, GitHubRepository
 
 
-class GithubClient(Protocol):
-    """Protocol for GitHub client interface."""
-
-    def read_repository(self, repo_url: str) -> Dict[str, Any]:
-        """Read repository structure from URL."""
-        ...
 
 
-class MockGithubClient:
-    """Mock GitHub client for testing/demo purposes."""
 
-    def read_repository(self, repo_url: str) -> Dict[str, Any]:
-        """Mock repository reading - returns fake structure."""
-        time.sleep(1)  # Simulate delay
-        return {
-            "src/": {
-                "main.py": None,
-                "utils.py": None,
-                "config.py": None,
-                "services/": {
-                    "api.py": None,
-                    "db.py": None,
-                    "auth/": {
-                        "login.py": None,
-                        "token.py": None,
-                    },
-                },
-            },
-            "tests/": {
-                "test_main.py": None,
-                "test_utils.py": None,
-                "integration/": {
-                    "test_api.py": None,
-                },
-            },
-            "docs/": {
-                "README.md": None,
-                "API.md": None,
-            },
-            "app.py": None,
-            "requirements.txt": None,
-        }
+class RealGithubClient:
+    """GitHub client that fetches real repository data."""
+
+    def __init__(self, github_token: Optional[str] = None):
+        self._client = GitHubFileTree(github_token=github_token)
+
+    def read_repository(self, repo_url: str) -> GitHubRepository:
+        """Read repository structure from GitHub."""
+        return self._client.get_simple_tree_structure(repo_url)
 
 
 class WorkflowManager:
     """Manages the workflow for analyzing a repository."""
 
-    def __init__(self, github_client: GithubClient, llm_client: LLMClient):
+    def __init__(self, github_client: RealGithubClient, llm_client: LLMClient):
         self.github_client = github_client
         self.llm_client = llm_client
 
-    def read_repository(self, repo_url: str) -> Dict[str, Any]:
+    def read_repository(self, repo_url: str) -> GitHubRepository:
         """Step 1: Read repository structure."""
-        time.sleep(1)  # Simulate delay
         return self.github_client.read_repository(repo_url)
 
     def match_components(
@@ -128,7 +102,7 @@ class WorkflowManager:
 
 
 def get_workflow_manager(
-    github_client: Optional[GithubClient] = None,
+    github_client: Optional[RealGithubClient] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> WorkflowManager:
     if llm_client is None:
@@ -136,6 +110,9 @@ def get_workflow_manager(
 
     if github_client is None:
         # Use mock client for demo purposes
-        github_client = MockGithubClient()
+        github_client = get_github_client()
 
     return WorkflowManager(github_client=github_client, llm_client=llm_client)
+
+
+
