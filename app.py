@@ -1,5 +1,6 @@
 import streamlit as st
-import time
+
+from src.workflow_manager import get_workflow_manager
 
 
 st.title("Gitsplain: visual diagram of a codebase")
@@ -19,6 +20,10 @@ if "step3_complete" not in st.session_state:
 if "step4_complete" not in st.session_state:
     st.session_state.step4_complete = False
 
+# Initialize workflow manager
+if "workflow_manager" not in st.session_state:
+    st.session_state.workflow_manager = get_workflow_manager()
+
 with st.expander(
     "Step 1: Reading repository",
     expanded=st.session_state.step1_complete
@@ -28,37 +33,10 @@ with st.expander(
         st.write(f"Reading repository: {repo_url}")
         if st.button("Start reading", key="step1_btn"):
             with st.spinner("Reading repository..."):
-                time.sleep(1)
-                # Nested folder structure: dict for folders, list for files, None for single files
-                fake_files = {
-                    "src/": {
-                        "main.py": None,
-                        "utils.py": None,
-                        "config.py": None,
-                        "services/": {
-                            "api.py": None,
-                            "db.py": None,
-                            "auth/": {
-                                "login.py": None,
-                                "token.py": None,
-                            },
-                        },
-                    },
-                    "tests/": {
-                        "test_main.py": None,
-                        "test_utils.py": None,
-                        "integration/": {
-                            "test_api.py": None,
-                        },
-                    },
-                    "docs/": {
-                        "README.md": None,
-                        "API.md": None,
-                    },
-                    "app.py": None,
-                    "requirements.txt": None,
-                }
-                st.session_state.repository_files = fake_files
+                repository_files = st.session_state.workflow_manager.read_repository(
+                    repo_url
+                )
+                st.session_state.repository_files = repository_files
                 st.session_state.step1_complete = True
                 st.rerun()
 
@@ -93,14 +71,10 @@ with st.expander(
         st.write("Matching components...")
         if st.button("Start component matching", key="step2_btn"):
             with st.spinner("Matching components..."):
-                time.sleep(1)
-                fake_matches = {
-                    "Database": ["src/config.py", "src/utils.py"],
-                    "API Handler": ["src/main.py", "app.py"],
-                    "Test Suite": ["tests/test_main.py", "tests/test_utils.py"],
-                    "Documentation": ["docs/README.md", "docs/API.md"],
-                }
-                st.session_state.component_matches = fake_matches
+                component_matches = st.session_state.workflow_manager.match_components(
+                    st.session_state.repository_files
+                )
+                st.session_state.component_matches = component_matches
                 st.session_state.step2_complete = True
                 st.rerun()
 
@@ -125,34 +99,11 @@ with st.expander(
         st.write("Building JSON graph...")
         if st.button("Build JSON graph", key="step3_btn"):
             with st.spinner("Building JSON graph..."):
-                time.sleep(1)
-                api_result = {
-                    "repository": repo_url,
-                    "components": [
-                        {
-                            "name": "Database",
-                            "files": ["src/config.py", "src/utils.py"],
-                            "dependencies": ["API Handler"],
-                        },
-                        {
-                            "name": "API Handler",
-                            "files": ["src/main.py", "app.py"],
-                            "dependencies": ["Database", "Test Suite"],
-                        },
-                        {
-                            "name": "Test Suite",
-                            "files": ["tests/test_main.py", "tests/test_utils.py"],
-                            "dependencies": ["API Handler"],
-                        },
-                        {
-                            "name": "Documentation",
-                            "files": ["docs/README.md", "docs/API.md"],
-                            "dependencies": [],
-                        },
-                    ],
-                    "total_files": 8,
-                    "total_components": 4,
-                }
+                api_result = st.session_state.workflow_manager.build_json_graph(
+                    st.session_state.repository_files,
+                    st.session_state.component_matches,
+                    repo_url,
+                )
                 st.session_state.api_result = api_result
                 st.session_state.step3_complete = True
                 st.rerun()
@@ -174,17 +125,9 @@ with st.expander(
         st.write("Generating HTML graph...")
         if st.button("Generate graph", key="step4_btn"):
             with st.spinner("Generating graph..."):
-                time.sleep(1)
-                html_graph = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                </head>
-                <body>
-                    MY GRAPH HERE
-                </body>
-                </html>
-                """
+                html_graph = st.session_state.workflow_manager.generate_html_graph(
+                    st.session_state.api_result
+                )
                 st.session_state.html_graph = html_graph
                 st.session_state.step4_complete = True
                 st.rerun()
