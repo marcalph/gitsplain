@@ -11,30 +11,16 @@ from src.services.llm import LLMClient
 from src.services.github.client import GitHubFileTree, GitHubRepository
 
 
-
-
-
-class RealGithubClient:
-    """GitHub client that fetches real repository data."""
-
-    def __init__(self, github_token: Optional[str] = None):
-        self._client = GitHubFileTree(github_token=github_token)
-
-    def read_repository(self, repo_url: str) -> GitHubRepository:
-        """Read repository structure from GitHub."""
-        return self._client.get_simple_tree_structure(repo_url)
-
-
 class WorkflowManager:
     """Manages the workflow for analyzing a repository."""
 
-    def __init__(self, github_client: RealGithubClient, llm_client: LLMClient):
+    def __init__(self, github_client: GitHubFileTree, llm_client: LLMClient):
         self.github_client = github_client
         self.llm_client = llm_client
 
     def read_repository(self, repo_url: str) -> GitHubRepository:
         """Step 1: Read repository structure."""
-        return self.github_client.read_repository(repo_url)
+        return self.github_client.get_simple_tree_structure(repo_url)
 
     def match_components(
         self, repository_structure: Dict[str, Any]
@@ -102,7 +88,7 @@ class WorkflowManager:
 
 
 def get_workflow_manager(
-    github_client: Optional[RealGithubClient] = None,
+    github_client: Optional[GitHubFileTree] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> WorkflowManager:
     if llm_client is None:
