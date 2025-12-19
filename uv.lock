@@ -471,6 +471,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "litellm" },
     { name = "loguru" },
+    { name = "openai" },
     { name = "pydantic" },
     { name = "streamlit" },
 ]
@@ -486,6 +487,7 @@ dev = [
 requires-dist = [
     { name = "litellm", specifier = ">=1.80.10" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "openai", specifier = ">=1.0.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "streamlit", specifier = ">=1.52.2" },
 ]
