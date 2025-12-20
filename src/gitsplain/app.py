@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.workflow_manager import get_workflow_manager
+from gitsplain.workflow_manager import get_workflow_manager
 
 
 st.title("Gitsplain: visual diagram of a codebase")

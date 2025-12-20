@@ -1,40 +1,27 @@
 """Workflow manager for repository analysis workflow."""
 
 import time
-from typing import Any, Dict, Optional, Protocol
-from src.services.github.service import get_github_client
+from typing import Any, Dict, Optional
+from gitsplain.services.llm import LLMClient
+from gitsplain.services.github import GitHubClient
+
 
 from dotenv import load_dotenv
+
 load_dotenv()
-
-from src.services.llm import LLMClient
-from src.services.github.client import GitHubFileTree, GitHubRepository
-
-
-
-
-
-class RealGithubClient:
-    """GitHub client that fetches real repository data."""
-
-    def __init__(self, github_token: Optional[str] = None):
-        self._client = GitHubFileTree(github_token=github_token)
-
-    def read_repository(self, repo_url: str) -> GitHubRepository:
-        """Read repository structure from GitHub."""
-        return self._client.get_simple_tree_structure(repo_url)
 
 
 class WorkflowManager:
     """Manages the workflow for analyzing a repository."""
 
-    def __init__(self, github_client: RealGithubClient, llm_client: LLMClient):
+    def __init__(self, github_client: GitHubClient, llm_client: LLMClient):
         self.github_client = github_client
         self.llm_client = llm_client
 
-    def read_repository(self, repo_url: str) -> GitHubRepository:
+    def read_repository(self, repo_url: str) -> Dict[str, Any]:
         """Step 1: Read repository structure."""
-        return self.github_client.read_repository(repo_url)
+        username, repo = GitHubClient.parse_url(repo_url)
+        return self.github_client.get_repo_data(username, repo)
 
     def match_components(
         self, repository_structure: Dict[str, Any]
@@ -102,17 +89,13 @@ class WorkflowManager:
 
 
 def get_workflow_manager(
-    github_client: Optional[RealGithubClient] = None,
+    github_client: Optional[GitHubClient] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> WorkflowManager:
     if llm_client is None:
         llm_client = LLMClient()
 
     if github_client is None:
-        # Use mock client for demo purposes
-        github_client = get_github_client()
+        github_client = GitHubClient()
 
     return WorkflowManager(github_client=github_client, llm_client=llm_client)
-
-
-

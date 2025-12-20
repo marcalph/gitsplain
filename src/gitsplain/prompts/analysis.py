@@ -11,7 +11,7 @@ You are tasked with explaining to a principal software engineer how to draw the 
 Analyze these components carefully, as they will provide crucial information about the project's structure and purpose. Follow these steps to create an explanation for the principal software engineer:
 
 1. Identify the project type and purpose:
-   - Examine the file structure and README to determine if the project is a full-stack application, an open-source tool, a compiler, or another type of software imaginable.
+   - Examine the file structure and README to determine if the project is a full-stack application, an open-source framework, a compiler, or any other type of software imaginable.
    - Look for key indicators in the README, such as project description, features, or use cases.
 
 2. Analyze the file structure:
