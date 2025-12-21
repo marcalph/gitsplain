@@ -3,11 +3,12 @@
 import os
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
 
 from github import Auth, Github, GithubException
 from github.Repository import Repository
 from loguru import logger
+
+from gitsplain.utils import parse_github_url
 
 
 LANGUAGE_EXTENSIONS: dict[str, set[str]] = {
@@ -106,23 +107,7 @@ class GitHubClient:
     @staticmethod
     def parse_url(url: str) -> tuple[str, str]:
         """Parse a GitHub URL to extract username and repository."""
-        if "/" in url and "github.com" not in url and "://" not in url:
-            parts = url.strip("/").split("/")
-            if len(parts) >= 2:
-                return parts[0], parts[1]
-
-        parsed = urlparse(url)
-        if parsed.netloc and "github.com" not in parsed.netloc:
-            raise ValueError("URL must be from github.com")
-
-        path = parsed.path.strip("/")
-        parts = path.split("/")
-
-        if len(parts) < 2:
-            raise ValueError(
-                "Invalid GitHub URL. Expected: https://github.com/username/repo"
-            )
-        return parts[0], parts[1]
+        return parse_github_url(url)
 
     def _get_repo(self, username: str, repo: str) -> Repository:
         """Get a repository object."""

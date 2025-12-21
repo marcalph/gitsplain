@@ -1,15 +1,28 @@
 import streamlit as st
 
-from gitsplain.workflow_manager import get_workflow_manager
+from gitsplain.utils import build_github_url, parse_github_url
+from gitsplain.workflow import get_workflow_manager
 
+st.title("Gitsplain: visualize a codebase in seconds")
 
-st.title("Gitsplain: visual diagram of a codebase")
-
-repo_url = st.text_input(
-    "Repository URL",
-    placeholder="https://github.com/username/repository",
-    help="Paste the URL of the repository you want to analyze",
+repo_input = st.text_input(
+    "Repository",
+    placeholder="owner/repo or https://github.com/owner/repo",
+    help="Enter owner/repo or full GitHub URL",
 )
+
+# Parse input and normalize to full URL
+repo_url = None
+owner = None
+repo = None
+
+if repo_input:
+    try:
+        owner, repo = parse_github_url(repo_input)
+        repo_url = build_github_url(owner, repo)
+        st.caption(f"Repository: **{owner}/{repo}**")
+    except ValueError as e:
+        st.error(f"Invalid input: {e}")
 
 if "step1_complete" not in st.session_state:
     st.session_state.step1_complete = False
@@ -29,14 +42,15 @@ with st.expander(
     expanded=st.session_state.step1_complete
     or (bool(repo_url) and not st.session_state.step1_complete),
 ):
-    if repo_url:
-        st.write(f"Reading repository: {repo_url}")
+    if repo_url and owner and repo:
+        st.write(f"Reading repository: [{owner}/{repo}]({repo_url})")
         if st.button("Start reading", key="step1_btn"):
             with st.spinner("Reading repository..."):
                 repository_files = st.session_state.workflow_manager.read_repository(
                     repo_url
                 )
                 st.session_state.repository_files = repository_files
+                st.session_state.repo_url = repo_url
                 st.session_state.step1_complete = True
                 st.rerun()
 
@@ -102,7 +116,7 @@ with st.expander(
                 api_result = st.session_state.workflow_manager.build_json_graph(
                     st.session_state.repository_files,
                     st.session_state.component_matches,
-                    repo_url,
+                    st.session_state.repo_url,
                 )
                 st.session_state.api_result = api_result
                 st.session_state.step3_complete = True

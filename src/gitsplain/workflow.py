@@ -4,24 +4,48 @@ import time
 from typing import Any, Dict, Optional
 from gitsplain.services.llm import LLMClient
 from gitsplain.services.github import GitHubClient
-
+from gitsplain.utils import parse_github_url
+from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
-class WorkflowManager:
+@dataclass
+class GenerationState:
+    """
+    Data container that accumulates results as it flows through diagram generation phases.
+    Each phase reads what it needs and populates its outputs, primary goal is inspection/debugging.
+    """
+
+    # inputs
+    owner: str
+    repo: str
+    instructions: str = ""
+
+    # static analysis phase
+    # component mapping
+    # graph building
+
+
+class DiagramGenerator:
     """Manages the workflow for analyzing a repository."""
 
     def __init__(self, github_client: GitHubClient, llm_client: LLMClient):
         self.github_client = github_client
         self.llm_client = llm_client
+        self.state: Optional[GenerationState] = None
+
+    def run(self):
+        # template method
+        pass
 
     def read_repository(self, repo_url: str) -> Dict[str, Any]:
         """Step 1: Read repository structure."""
-        username, repo = GitHubClient.parse_url(repo_url)
-        return self.github_client.get_repo_data(username, repo)
+        owner, repo = parse_github_url(repo_url)
+        self.state = GenerationState(owner=owner, repo=repo)
+        return self.github_client.get_repo_data(owner, repo)
 
     def match_components(
         self, repository_structure: Dict[str, Any]
@@ -43,33 +67,18 @@ class WorkflowManager:
     ) -> Dict[str, Any]:
         """Step 3: Build JSON graph representation."""
         time.sleep(1)  # Simulate delay
-        # Mock JSON graph
         return {
             "repository": repo_url,
             "components": [
                 {
-                    "name": "Database",
-                    "files": ["src/config.py", "src/utils.py"],
-                    "dependencies": ["API Handler"],
-                },
-                {
-                    "name": "API Handler",
-                    "files": ["src/main.py", "app.py"],
-                    "dependencies": ["Database", "Test Suite"],
-                },
-                {
-                    "name": "Test Suite",
-                    "files": ["tests/test_main.py", "tests/test_utils.py"],
-                    "dependencies": ["API Handler"],
-                },
-                {
-                    "name": "Documentation",
-                    "files": ["docs/README.md", "docs/API.md"],
+                    "name": name,
+                    "files": files,
                     "dependencies": [],
-                },
+                }
+                for name, files in component_matches.items()
             ],
-            "total_files": 8,
-            "total_components": 4,
+            "total_files": sum(len(f) for f in component_matches.values()),
+            "total_components": len(component_matches),
         }
 
     def generate_html_graph(self, json_graph: Dict[str, Any]) -> str:
@@ -91,11 +100,11 @@ class WorkflowManager:
 def get_workflow_manager(
     github_client: Optional[GitHubClient] = None,
     llm_client: Optional[LLMClient] = None,
-) -> WorkflowManager:
+) -> DiagramGenerator:
     if llm_client is None:
         llm_client = LLMClient()
 
     if github_client is None:
         github_client = GitHubClient()
 
-    return WorkflowManager(github_client=github_client, llm_client=llm_client)
+    return DiagramGenerator(github_client=github_client, llm_client=llm_client)
