@@ -1,17 +1,54 @@
 import streamlit as st
-
+from gitsplain.diagram import get_diagram_generator
 from gitsplain.utils import build_github_url, parse_github_url
-from gitsplain.workflow import get_workflow_manager
+from dotenv import load_dotenv
 
-st.title("Gitsplain: visualize a codebase in seconds")
+load_dotenv()
 
-repo_input = st.text_input(
-    "Repository",
-    placeholder="owner/repo or https://github.com/owner/repo",
-    help="Enter owner/repo or full GitHub URL",
+
+# Page configuration
+st.set_page_config(
+    page_title="Gitsplain",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-# Parse input and normalize to full URL
+
+def init_session_state():
+    """Initialize session state variables."""
+    defaults = {
+        "graph_html": None,
+        "repo_info": None,
+        "static_analysis": None,
+        "component_mapping": None,
+        "graph_structure": None,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+init_session_state()
+st.title("Gitsplain")
+st.markdown("Visualize any codebase in seconds.")
+col1, col2 = st.columns([2, 3])
+
+with col1:
+    repo_input = st.text_input(
+        "Repository",
+        placeholder="owner/repo or https://github.com/owner/repo",
+        help="Enter owner/repo or full GitHub URL",
+    )
+
+with col2:
+    instructions = st.text_input(
+        "Custom Instructions (optional)",
+        placeholder="e.g., Focus on the API layer",
+        help="Add custom instructions for diagram generation",
+    )
+
+
 repo_url = None
 owner = None
 repo = None
@@ -24,130 +61,59 @@ if repo_input:
     except ValueError as e:
         st.error(f"Invalid input: {e}")
 
-if "step1_complete" not in st.session_state:
-    st.session_state.step1_complete = False
-if "step2_complete" not in st.session_state:
-    st.session_state.step2_complete = False
-if "step3_complete" not in st.session_state:
-    st.session_state.step3_complete = False
-if "step4_complete" not in st.session_state:
-    st.session_state.step4_complete = False
+# Generate button
+if owner and repo:
+    if st.button("Generate Diagram", type="primary"):
+        with st.spinner("Generating architecture diagram..."):
+            generator = get_diagram_generator()
+            state = generator.run_all(owner, repo, instructions)
+            st.session_state.graph_html = state.graph_html
+            st.session_state.repo_info = state.repo_info
+            st.session_state.static_analysis = state.static_analysis
+            st.session_state.component_mapping = state.component_mapping
+            st.session_state.graph_structure = state.graph_structure
 
-# Initialize workflow manager
-if "workflow_manager" not in st.session_state:
-    st.session_state.workflow_manager = get_workflow_manager()
 
-with st.expander(
-    "Step 1: Reading repository",
-    expanded=st.session_state.step1_complete
-    or (bool(repo_url) and not st.session_state.step1_complete),
-):
-    if repo_url and owner and repo:
-        st.write(f"Reading repository: [{owner}/{repo}]({repo_url})")
-        if st.button("Start reading", key="step1_btn"):
-            with st.spinner("Reading repository..."):
-                repository_files = st.session_state.workflow_manager.read_repository(
-                    repo_url
-                )
-                st.session_state.repository_files = repository_files
-                st.session_state.repo_url = repo_url
-                st.session_state.step1_complete = True
-                st.rerun()
+# Tabs for graph and phase outputs
+tab_graph, tab_repo, tab_static, tab_mapping, tab_graph_struct = st.tabs(
+    [
+        "Graph",
+        "Phase 0: repository info",
+        "Phase 1: static analysis",
+        "Phase 2: component mapping",
+        "Phase 3: Graph representation",
+    ]
+)
 
-        if st.session_state.step1_complete and "repository_files" in st.session_state:
-            st.success("Repository read successfully!")
-            st.write("**Repository structure:**")
 
-            def display_structure(structure, indent=0):
-                """Recursively display nested folder structure"""
-                prefix = "  " * indent
-                for item, content in structure.items():
-                    if content is None:
-                        # It's a file
-                        st.write(f"{prefix}📄 {item}")
-                    elif isinstance(content, dict):
-                        # It's a folder
-                        st.write(f"{prefix}📁 {item}")
-                        display_structure(content, indent + 1)
-
-            display_structure(st.session_state.repository_files)
+with tab_graph:
+    if st.session_state.graph_html:
+        st.components.v1.html(st.session_state.graph_html, height=600, scrolling=True)
     else:
-        st.info("Please enter a repository URL above to start.")
+        st.info("Enter a repository and click 'Generate Diagram' to visualize.")
 
-with st.expander(
-    "Step 2: Component matching",
-    expanded=bool(
-        st.session_state.step2_complete
-        or (st.session_state.step1_complete and not st.session_state.step2_complete)
-    ),
-):
-    if st.session_state.step1_complete:
-        st.write("Matching components...")
-        if st.button("Start component matching", key="step2_btn"):
-            with st.spinner("Matching components..."):
-                component_matches = st.session_state.workflow_manager.match_components(
-                    st.session_state.repository_files
-                )
-                st.session_state.component_matches = component_matches
-                st.session_state.step2_complete = True
-                st.rerun()
 
-        if st.session_state.step2_complete and "component_matches" in st.session_state:
-            st.success("Components matched successfully!")
-            st.write("**Matched components:**")
-            for component, files in st.session_state.component_matches.items():
-                st.write(f"🔧 **{component}**")
-                for file in files:
-                    st.write(f"  └── {file}")
+with tab_repo:
+    if st.session_state.repo_info:
+        st.json(st.session_state.repo_info)
     else:
-        st.info("Complete Step 1 first.")
+        st.caption("No repository data yet.")
 
-with st.expander(
-    "Step 3: JSON result",
-    expanded=bool(
-        st.session_state.step3_complete
-        or (st.session_state.step2_complete and not st.session_state.step3_complete)
-    ),
-):
-    if st.session_state.step2_complete:
-        st.write("Building JSON graph...")
-        if st.button("Build JSON graph", key="step3_btn"):
-            with st.spinner("Building JSON graph..."):
-                api_result = st.session_state.workflow_manager.build_json_graph(
-                    st.session_state.repository_files,
-                    st.session_state.component_matches,
-                    st.session_state.repo_url,
-                )
-                st.session_state.api_result = api_result
-                st.session_state.step3_complete = True
-                st.rerun()
+with tab_static:
+    if st.session_state.static_analysis:
+        st.json(st.session_state.static_analysis)
     else:
-        st.info("Complete Step 2 first.")
+        st.caption("No static analysis data yet.")
 
-    if st.session_state.step3_complete and "api_result" in st.session_state:
-        st.success("JSON graph built successfully!")
-        st.json(st.session_state.api_result)
-
-with st.expander(
-    "Step 4: HTML graph",
-    expanded=bool(
-        st.session_state.step4_complete
-        or (st.session_state.step3_complete and not st.session_state.step4_complete)
-    ),
-):
-    if st.session_state.step3_complete:
-        st.write("Generating HTML graph...")
-        if st.button("Generate graph", key="step4_btn"):
-            with st.spinner("Generating graph..."):
-                html_graph = st.session_state.workflow_manager.generate_html_graph(
-                    st.session_state.api_result
-                )
-                st.session_state.html_graph = html_graph
-                st.session_state.step4_complete = True
-                st.rerun()
+with tab_mapping:
+    if st.session_state.component_mapping:
+        st.json(st.session_state.component_mapping)
     else:
-        st.info("Complete Step 3 first.")
+        st.caption("No component mapping data yet.")
 
-    if st.session_state.step4_complete and "html_graph" in st.session_state:
-        st.success("Graph generated successfully!")
-        st.components.v1.html(st.session_state.html_graph, height=600)
+
+with tab_graph_struct:
+    if st.session_state.graph_structure:
+        st.json(st.session_state.graph_structure)
+    else:
+        st.caption("No graph structure data yet.")
