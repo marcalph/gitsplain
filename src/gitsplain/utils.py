@@ -2,6 +2,8 @@
 
 from urllib.parse import urlparse
 
+from github import GithubException
+
 
 def parse_github_url(url: str) -> tuple[str, str]:
     """
@@ -14,7 +16,7 @@ def parse_github_url(url: str) -> tuple[str, str]:
         Tuple of (owner, repo_name)
 
     Raises:
-        ValueError: If URL is invalid
+        GithubException: If URL is invalid
 
     Examples:
         >>> parse_github_url("https://github.com/owner/repo")
@@ -31,14 +33,16 @@ def parse_github_url(url: str) -> tuple[str, str]:
     # Handle full GitHub URLs
     parsed = urlparse(url)
     if parsed.netloc and "github.com" not in parsed.netloc:
-        raise ValueError("URL must be from github.com")
+        raise GithubException(400, "URL must be from github.com", None)
 
     path = parsed.path.strip("/")
     parts = path.split("/")
 
     if len(parts) < 2:
-        raise ValueError(
-            "Invalid GitHub URL. Expected: https://github.com/owner/repo or owner/repo"
+        raise GithubException(
+            400,
+            "Invalid GitHub URL. Expected: https://github.com/owner/repo or owner/repo",
+            None,
         )
     return parts[0], parts[1]
 

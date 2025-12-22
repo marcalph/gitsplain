@@ -1,6 +1,8 @@
 import streamlit as st
+from github import GithubException
 from gitsplain.diagram import get_diagram_generator
-from gitsplain.utils import build_github_url, parse_github_url
+from gitsplain.services.github import GitHubClient
+from gitsplain.utils import parse_github_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -49,29 +51,31 @@ with col2:
     )
 
 
-repo_url = None
 owner = None
 repo = None
 
 if repo_input:
     try:
         owner, repo = parse_github_url(repo_input)
-        repo_url = build_github_url(owner, repo)
         st.caption(f"Repository: **{owner}/{repo}**")
-    except ValueError as e:
-        st.error(f"Invalid input: {e}")
+    except GithubException as e:
+        st.error(f"Invalid input: {e.data}")
 
 # Generate button
 if owner and repo:
     if st.button("Generate Diagram", type="primary"):
-        with st.spinner("Generating architecture diagram..."):
-            generator = get_diagram_generator()
-            state = generator.run_all(owner, repo, instructions)
-            st.session_state.graph_html = state.graph_html
-            st.session_state.repo_info = state.repo_info
-            st.session_state.static_analysis = state.static_analysis
-            st.session_state.component_mapping = state.component_mapping
-            st.session_state.graph_structure = state.graph_structure
+        github_client = GitHubClient()
+        if not github_client.check_repository_exists(owner, repo):
+            st.error(f"Repository **{owner}/{repo}** not found or is private.")
+        else:
+            with st.spinner("Generating architecture diagram..."):
+                generator = get_diagram_generator()
+                state = generator.run_all(owner, repo, instructions)
+                st.session_state.graph_html = state.graph_html
+                st.session_state.repo_info = state.repo_info
+                st.session_state.static_analysis = state.static_analysis
+                st.session_state.component_mapping = state.component_mapping
+                st.session_state.graph_structure = state.graph_structure
 
 
 # Tabs for graph and phase outputs

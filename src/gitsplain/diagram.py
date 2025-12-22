@@ -1,7 +1,9 @@
 """Diagram generator for repository architecture visualization."""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
+
+from gitsplain.services.github import GitHubClient
 
 
 @dataclass
@@ -13,7 +15,7 @@ class GenerationState:
     repo: str = ""
     instructions: str = ""
 
-    # Phase 0: repository info
+    # Phase 0: repository info (file tree, readme, top langugages)
     repo_info: dict[str, Any] = field(default_factory=dict)
 
     # Phase 1: static analysis
@@ -32,46 +34,25 @@ class GenerationState:
 class DiagramGenerator:
     """Generates architecture diagrams from repository analysis."""
 
-    def __init__(self):
+    def __init__(self, github_client: Optional[GitHubClient] = None):
         self.state = GenerationState()
+        self.github = github_client or GitHubClient()
 
     def phase0_repo_info(self, owner: str, repo: str) -> dict[str, Any]:
         """Phase 0: Fetch repository information."""
         self.state.owner = owner
         self.state.repo = repo
 
-        # Mock data
+        repo_data = self.github.get_repo_data(owner, repo)
+        languages = self.github.get_languages(owner, repo)
+
         self.state.repo_info = {
             "owner": owner,
             "repo": repo,
-            "default_branch": "main",
-            "description": "A sample repository for testing",
-            "language": "Python",
-            "stars": 1234,
-            "forks": 56,
-            "file_tree": [
-                "README.md",
-                "pyproject.toml",
-                "src/",
-                "src/__init__.py",
-                "src/main.py",
-                "src/api/",
-                "src/api/__init__.py",
-                "src/api/routes.py",
-                "src/api/handlers.py",
-                "src/models/",
-                "src/models/__init__.py",
-                "src/models/user.py",
-                "src/models/post.py",
-                "src/services/",
-                "src/services/__init__.py",
-                "src/services/auth.py",
-                "src/services/database.py",
-                "tests/",
-                "tests/test_api.py",
-                "tests/test_models.py",
-            ],
-            "readme": "# Sample Project\n\nThis is a sample project with API, models, and services.",
+            "default_branch": repo_data.get("default_branch", "main"),
+            "file_tree": repo_data.get("file_tree", "").split("\n"),
+            "readme": repo_data.get("readme", ""),
+            "languages": languages,
         }
         return self.state.repo_info
 
