@@ -12,6 +12,8 @@ dependencies = [
     "pygithub>=2.5.0",
     "python-dotenv>=1.2.1",
     "streamlit>=1.52.2",
+    "tree-sitter-language-pack>=0.13.0",
+    "tree-sitter-languages>=1.10.2",
 ]
 
 [dependency-groups]
