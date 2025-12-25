@@ -1,6 +1,7 @@
 import json
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from github import GithubException
 
@@ -94,7 +95,7 @@ tab_graph, tab_repo_analysis, tab_mapping, tab_graph_struct = st.tabs(
 
 with tab_graph:
     if st.session_state.graph_html:
-        st.components.v1.html(st.session_state.graph_html, height=600, scrolling=True)
+        components.html(st.session_state.graph_html, height=600, scrolling=True)
     else:
         st.info("Enter a repository and click 'Generate Diagram' to visualize.")
 

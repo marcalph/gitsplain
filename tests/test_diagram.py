@@ -26,27 +26,32 @@ class TestDiagramGenerator:
 
     def test_init_creates_state(self):
         """Test initialization creates empty state."""
-        with patch("gitsplain.diagram.GitHubClient"):
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient"),
+        ):
             generator = DiagramGenerator()
             assert isinstance(generator.state, GenerationState)
 
     def test_init_with_custom_client(self):
         """Test initialization with custom GitHub client."""
-        mock_client = MagicMock()
-        generator = DiagramGenerator(github_client=mock_client)
-        assert generator.github == mock_client
+        mock_github = MagicMock()
+        mock_llm = MagicMock()
+        generator = DiagramGenerator(github_client=mock_github, llm_client=mock_llm)
+        assert generator.github == mock_github
+        assert generator.llm == mock_llm
 
     def test_phase0_repo_info(self):
         """Test phase0 fetches and stores repo info."""
-        mock_client = MagicMock()
-        mock_client.get_repo_data.return_value = {
+        mock_github = MagicMock()
+        mock_github.get_repo_data.return_value = {
             "default_branch": "main",
             "file_tree": "src/main.py\nsrc/utils.py",
             "readme": "# Test Repo",
         }
-        mock_client.get_languages.return_value = {"Python": 1000}
+        mock_github.get_languages.return_value = {"Python": 1000}
 
-        generator = DiagramGenerator(github_client=mock_client)
+        generator = DiagramGenerator(github_client=mock_github, llm_client=MagicMock())
         result = generator.phase0_repo_info("owner", "repo")
 
         assert generator.state.owner == "owner"
@@ -56,31 +61,46 @@ class TestDiagramGenerator:
         assert result["readme"] == "# Test Repo"
         assert result["languages"] == {"Python": 1000}
 
-    def test_phase1_static_analysis(self):
-        """Test phase1 returns static analysis data."""
-        with patch("gitsplain.diagram.GitHubClient"):
+    def test_phase0_static_analysis(self):
+        """Test phase0 static analysis returns AST data."""
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient"),
+        ):
             generator = DiagramGenerator()
-            result = generator.phase1_static_analysis()
+            generator.state.repo_info = {"file_tree": [], "languages": {}}
+            result = generator.phase0_static_analysis()
 
             assert "languages" in result
-            assert "frameworks_detected" in result
-            assert "entry_points" in result
+            assert "files_parsed" in result
+            assert "files" in result
             assert generator.state.static_analysis == result
 
-    def test_phase2_component_mapping(self):
-        """Test phase2 returns component mapping."""
-        with patch("gitsplain.diagram.GitHubClient"):
+    def test_phase1_component_mapping(self):
+        """Test phase1 returns component mapping."""
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient") as mock_llm,
+        ):
+            mock_llm.return_value.call_api_structured.return_value = MagicMock(
+                mappings=[]
+            )
             generator = DiagramGenerator()
-            result = generator.phase2_component_mapping()
+            generator.state.repo_info = {"file_tree": [], "readme": ""}
+            generator.state.static_analysis = {"files": {}}
+            result = generator.phase1_component_mapping()
 
             assert isinstance(result, dict)
             assert generator.state.component_mapping == result
 
-    def test_phase3_graph_structure(self):
-        """Test phase3 returns graph structure."""
-        with patch("gitsplain.diagram.GitHubClient"):
+    def test_phase2_graph_structure(self):
+        """Test phase2 returns graph structure."""
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient"),
+        ):
             generator = DiagramGenerator()
-            result = generator.phase3_graph_structure()
+            result = generator.phase2_graph_structure()
 
             assert "nodes" in result
             assert "edges" in result
@@ -89,7 +109,10 @@ class TestDiagramGenerator:
 
     def test_generate_html(self):
         """Test HTML generation with Mermaid."""
-        with patch("gitsplain.diagram.GitHubClient"):
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient"),
+        ):
             generator = DiagramGenerator()
             generator.state.graph_structure = {
                 "nodes": [{"id": "test", "label": "Test", "color": "#000"}],
@@ -105,15 +128,19 @@ class TestDiagramGenerator:
 
     def test_run_all(self):
         """Test run_all executes all phases."""
-        mock_client = MagicMock()
-        mock_client.get_repo_data.return_value = {
+        mock_github = MagicMock()
+        mock_github.get_repo_data.return_value = {
             "default_branch": "main",
             "file_tree": "src/main.py",
             "readme": "# Test",
         }
-        mock_client.get_languages.return_value = {"Python": 100}
+        mock_github.get_languages.return_value = {"Python": 100}
+        mock_github.get_files_content.return_value = {}
 
-        generator = DiagramGenerator(github_client=mock_client)
+        mock_llm = MagicMock()
+        mock_llm.call_api_structured.return_value = MagicMock(mappings=[])
+
+        generator = DiagramGenerator(github_client=mock_github, llm_client=mock_llm)
         state = generator.run_all("owner", "repo", "custom instructions")
 
         assert state.owner == "owner"
@@ -131,6 +158,9 @@ class TestGetDiagramGenerator:
 
     def test_returns_generator(self):
         """Test factory returns DiagramGenerator instance."""
-        with patch("gitsplain.diagram.GitHubClient"):
+        with (
+            patch("gitsplain.diagram.GitHubClient"),
+            patch("gitsplain.diagram.LLMClient"),
+        ):
             generator = get_diagram_generator()
             assert isinstance(generator, DiagramGenerator)

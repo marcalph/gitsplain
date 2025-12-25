@@ -1,12 +1,15 @@
 """Diagram generator for repository architecture visualization."""
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from loguru import logger
 
+from gitsplain.prompts.mapping import MAPPING_PROMPT_STRUCTURED, MappingResponse
 from gitsplain.services.ast import EXTENSION_TO_LANGUAGE, ASTParser
 from gitsplain.services.github import GitHubClient
+from gitsplain.services.llm import LLMClient
 
 
 @dataclass
@@ -18,16 +21,14 @@ class GenerationState:
     repo: str = ""
     instructions: str = ""
 
-    # Phase 0: repository info (file tree, readme, top langugages)
+    # Phase 0: repository info (file tree, readme, top languages) + static analysis
     repo_info: dict[str, Any] = field(default_factory=dict)
-
-    # Phase 1: static analysis
     static_analysis: dict[str, Any] = field(default_factory=dict)
 
-    # Phase 2: component mapping
-    component_mapping: dict[str, list[str]] = field(default_factory=dict)
+    # Phase 1: component mapping
+    component_mapping: dict[str, Any] = field(default_factory=dict)
 
-    # Phase 3: graph structure
+    # Phase 2: graph structure
     graph_structure: dict[str, Any] = field(default_factory=dict)
 
     # Final output
@@ -37,9 +38,14 @@ class GenerationState:
 class DiagramGenerator:
     """Generates architecture diagrams from repository analysis."""
 
-    def __init__(self, github_client: Optional[GitHubClient] = None):
+    def __init__(
+        self,
+        github_client: Optional[GitHubClient] = None,
+        llm_client: Optional[LLMClient] = None,
+    ):
         self.state = GenerationState()
         self.github = github_client or GitHubClient()
+        self.llm = llm_client or LLMClient()
 
     def phase0_repo_info(self, owner: str, repo: str) -> dict[str, Any]:
         """Phase 0: Fetch repository information."""
@@ -59,8 +65,8 @@ class DiagramGenerator:
         }
         return self.state.repo_info
 
-    def phase1_static_analysis(self, max_files: int = 50) -> dict[str, Any]:
-        """Phase 1: Perform static analysis using AST parsing."""
+    def phase0_static_analysis(self, max_files: int = 50) -> dict[str, Any]:
+        """Phase 0: Perform static analysis using AST parsing."""
         parser = ASTParser()
         file_tree = self.state.repo_info.get("file_tree", [])
 
@@ -117,32 +123,39 @@ class DiagramGenerator:
         }
         return self.state.static_analysis
 
-    def phase2_component_mapping(self) -> dict[str, list[str]]:
-        """Phase 2: Map files to architectural components."""
-        # Mock data
+    def phase1_component_mapping(self) -> dict[str, Any]:
+        """Phase 1: Map files to architectural components using LLM."""
+        # Prepare data for LLM
+        file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
+        readme = self.state.repo_info.get("readme", "")
+        symbols = json.dumps(self.state.static_analysis.get("files", {}), indent=2)
+
+        # Call LLM with structured output
+        response = self.llm.call_api_structured(
+            system_prompt=MAPPING_PROMPT_STRUCTURED,
+            data={
+                "explanation": readme,
+                "file_tree": file_tree,
+                "symbols": symbols,
+            },
+            response_model=MappingResponse,
+        )
+
+        # Convert to dict format grouped by component
+        component_to_paths: dict[str, list[str]] = {}
+        for mapping in response.mappings:
+            if mapping.component not in component_to_paths:
+                component_to_paths[mapping.component] = []
+            component_to_paths[mapping.component].append(mapping.path)
+
         self.state.component_mapping = {
-            "API Layer": [
-                "src/api/routes.py",
-                "src/api/handlers.py",
-                "src/main.py",
-            ],
-            "Data Models": [
-                "src/models/user.py",
-                "src/models/post.py",
-            ],
-            "Services": [
-                "src/services/auth.py",
-                "src/services/database.py",
-            ],
-            "Tests": [
-                "tests/test_api.py",
-                "tests/test_models.py",
-            ],
+            "mappings": [m.model_dump() for m in response.mappings],
+            "by_component": component_to_paths,
         }
         return self.state.component_mapping
 
-    def phase3_graph_structure(self) -> dict[str, Any]:
-        """Phase 3: Build the graph structure representation."""
+    def phase2_graph_structure(self) -> dict[str, Any]:
+        """Phase 2: Build the graph structure representation."""
         # Mock data
         self.state.graph_structure = {
             "nodes": [
@@ -253,9 +266,9 @@ class DiagramGenerator:
         """Run all phases and return the complete state."""
         self.state.instructions = instructions
         self.phase0_repo_info(owner, repo)
-        self.phase1_static_analysis()
-        self.phase2_component_mapping()
-        self.phase3_graph_structure()
+        self.phase0_static_analysis()
+        self.phase1_component_mapping()
+        self.phase2_graph_structure()
         self.generate_html()
         return self.state
 

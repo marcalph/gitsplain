@@ -1,4 +1,17 @@
-"""Phase 2: Component mapping prompts."""
+"""Phase 1: Component mapping prompts."""
+
+from pydantic import BaseModel
+
+
+class ComponentMapping(BaseModel):
+    component: str
+    path: str
+    is_directory: bool
+
+
+class MappingResponse(BaseModel):
+    mappings: list[ComponentMapping]
+
 
 MAPPING_PROMPT = """
 You are tasked with mapping key components of a system design to their corresponding files and directories in a project's file structure.
