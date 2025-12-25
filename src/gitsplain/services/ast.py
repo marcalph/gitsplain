@@ -2,16 +2,10 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, cast
 
 from loguru import logger
-
-try:
-    from tree_sitter_language_pack import get_parser
-    TREE_SITTER_AVAILABLE = True
-except ImportError:
-    TREE_SITTER_AVAILABLE = False
-    logger.warning("tree-sitter-language-pack not installed, AST extraction disabled")
+from tree_sitter_language_pack import SupportedLanguage, get_parser
 
 
 # Map file extensions to tree-sitter language names
@@ -53,7 +47,11 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
 CLASS_NODE_TYPES: dict[str, set[str]] = {
     "python": {"class_definition"},
     "javascript": {"class_declaration"},
-    "typescript": {"class_declaration", "interface_declaration", "type_alias_declaration"},
+    "typescript": {
+        "class_declaration",
+        "interface_declaration",
+        "type_alias_declaration",
+    },
     "tsx": {"class_declaration", "interface_declaration", "type_alias_declaration"},
     "go": {"type_declaration"},  # for struct types
     "rust": {"struct_item", "enum_item", "trait_item", "impl_item"},
@@ -91,15 +89,17 @@ FUNCTION_NODE_TYPES: dict[str, set[str]] = {
 @dataclass
 class Symbol:
     """A code symbol (class, function, etc.)."""
+
     name: str
     kind: str  # "class", "function", "interface", "struct", etc.
     line: int
-    docstring: Optional[str] = None
+    docstring: str | None = None
 
 
 @dataclass
 class FileSymbols:
     """Symbols extracted from a single file."""
+
     path: str
     language: str
     classes: list[Symbol] = field(default_factory=list)
@@ -114,27 +114,26 @@ class ASTParser:
     """Parses source files and extracts code symbols using tree-sitter."""
 
     def __init__(self):
-        self._parsers: dict[str, any] = {}
+        self._parsers: dict[str, Any] = {}
 
     def _get_parser(self, language: str):
         """Get or create a parser for the given language."""
-        if not TREE_SITTER_AVAILABLE:
-            return None
-
         if language not in self._parsers:
             try:
-                self._parsers[language] = get_parser(language)
+                self._parsers[language] = get_parser(cast(SupportedLanguage, language))
             except Exception as e:
                 logger.warning(f"Failed to get parser for {language}: {e}")
                 return None
         return self._parsers[language]
 
-    def detect_language(self, file_path: str) -> Optional[str]:
+    def detect_language(self, file_path: str) -> str | None:
         """Detect language from file extension."""
         ext = Path(file_path).suffix.lower()
         return EXTENSION_TO_LANGUAGE.get(ext)
 
-    def extract_symbols(self, content: str, file_path: str, language: str = None) -> Optional[FileSymbols]:
+    def extract_symbols(
+        self, content: str, file_path: str, language: str | None = None
+    ) -> FileSymbols | None:
         """
         Extract classes and functions from source code.
 
@@ -146,9 +145,6 @@ class ASTParser:
         Returns:
             FileSymbols with extracted classes and functions, or None if parsing failed
         """
-        if not TREE_SITTER_AVAILABLE:
-            return None
-
         # Detect language if not provided
         if not language:
             language = self.detect_language(file_path)
@@ -215,7 +211,9 @@ class ASTParser:
                 child, content, language, class_types, function_types, result, depth + 1
             )
 
-    def _extract_symbol(self, node, content: str, language: str, kind: str) -> Optional[Symbol]:
+    def _extract_symbol(
+        self, node, content: str, language: str, kind: str
+    ) -> Symbol | None:
         """Extract symbol information from an AST node."""
         name = self._get_name(node, language)
         if not name:
@@ -236,7 +234,7 @@ class ASTParser:
             docstring=docstring,
         )
 
-    def _get_name(self, node, language: str) -> Optional[str]:
+    def _get_name(self, node, language: str) -> str | None:
         """Extract the name from an AST node."""
         # Language-specific name extraction
         name_field_types = {
@@ -281,7 +279,7 @@ class ASTParser:
         }
         return kind_map.get(node_type, default_kind)
 
-    def _get_python_docstring(self, node, content: str) -> Optional[str]:
+    def _get_python_docstring(self, node, content: str) -> str | None:
         """Extract docstring from Python class or function."""
         # Look for string as first child of block (docstring)
         for child in node.children:
@@ -308,17 +306,16 @@ class ASTParser:
                             if expr_child.type == "string":
                                 for string_child in expr_child.children:
                                     if string_child.type == "string_content":
-                                        docstring = string_child.text.decode("utf-8").strip()
+                                        docstring = string_child.text.decode(
+                                            "utf-8"
+                                        ).strip()
                                         if len(docstring) > 200:
                                             docstring = docstring[:200] + "..."
                                         return docstring
                     break  # Only check first non-trivial statement
         return None
 
-    def extract_from_files(
-        self,
-        files: dict[str, str]
-    ) -> dict[str, FileSymbols]:
+    def extract_from_files(self, files: dict[str, str]) -> dict[str, FileSymbols]:
         """
         Extract symbols from multiple files.
 
