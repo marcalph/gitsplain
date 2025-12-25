@@ -1,9 +1,12 @@
+import json
+
 import streamlit as st
+from dotenv import load_dotenv
 from github import GithubException
+
 from gitsplain.diagram import get_diagram_generator
 from gitsplain.services.github import GitHubClient
 from gitsplain.utils import parse_github_url
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -79,13 +82,12 @@ if owner and repo:
 
 
 # Tabs for graph and phase outputs
-tab_graph, tab_repo, tab_static, tab_mapping, tab_graph_struct = st.tabs(
+tab_graph, tab_repo_analysis, tab_mapping, tab_graph_struct = st.tabs(
     [
         "Graph",
-        "Phase 0: repository info",
-        "Phase 1: static analysis",
-        "Phase 2: component mapping",
-        "Phase 3: Graph representation",
+        "Phase 0: repository analysis",
+        "Phase 1: component mapping",
+        "Phase 2: Graph representation",
     ]
 )
 
@@ -97,24 +99,32 @@ with tab_graph:
         st.info("Enter a repository and click 'Generate Diagram' to visualize.")
 
 
-with tab_repo:
-    if st.session_state.repo_info:
-        st.json(st.session_state.repo_info)
+with tab_repo_analysis:
+    if st.session_state.repo_info or st.session_state.static_analysis:
+        st.subheader("Repository Info")
+        if st.session_state.repo_info:
+            st.json(st.session_state.repo_info)
+
+        st.subheader("Static Analysis (AST)")
+        if st.session_state.static_analysis:
+            st.json(st.session_state.static_analysis)
+
         st.subheader("LLM Input")
-        file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
-        readme = st.session_state.repo_info.get("readme", "")
-        llm_input = (
-            f"<filetree>\n{file_tree}\n</filetree>\n\n<readme>\n{readme}\n</readme>"
-        )
-        st.code(llm_input, language=None)
+        if st.session_state.repo_info:
+            file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
+            readme = st.session_state.repo_info.get("readme", "")
+            symbols = ""
+            if st.session_state.static_analysis:
+                symbols_data = st.session_state.static_analysis.get("files", {})
+                symbols = json.dumps(symbols_data, indent=2)
+            llm_input = (
+                f"<filetree>\n{file_tree}\n</filetree>\n\n"
+                f"<symbols>\n{symbols}\n</symbols>\n\n"
+                f"<readme>\n{readme}\n</readme>"
+            )
+            st.code(llm_input, language=None)
     else:
         st.caption("No repository data yet.")
-
-with tab_static:
-    if st.session_state.static_analysis:
-        st.json(st.session_state.static_analysis)
-    else:
-        st.caption("No static analysis data yet.")
 
 with tab_mapping:
     if st.session_state.component_mapping:
