@@ -142,3 +142,27 @@ class GitHubClient:
         except GithubException as e:
             logger.warning(f"Failed to fetch languages: {e}")
             return {}
+
+    def get_file_content(self, owner: str, repo: str, path: str) -> str | None:
+        """Get the content of a specific file."""
+        try:
+            repository = self._get_repo(owner, repo)
+            content = repository.get_contents(path, ref=repository.default_branch)
+            if isinstance(content, list):
+                return None  # It's a directory
+            return content.decoded_content.decode("utf-8")
+        except GithubException as e:
+            logger.debug(f"Failed to fetch {path}: {e}")
+            return None
+
+    def get_files_content(
+        self, owner: str, repo: str, paths: list[str]
+    ) -> dict[str, str]:
+        """Get the content of multiple files."""
+        results = {}
+        for path in paths:
+            content = self.get_file_content(owner, repo, path)
+            if content is not None:
+                results[path] = content
+        logger.info(f"Fetched content for {len(results)}/{len(paths)} files")
+        return results

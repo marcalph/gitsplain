@@ -100,6 +100,13 @@ with tab_graph:
 with tab_repo:
     if st.session_state.repo_info:
         st.json(st.session_state.repo_info)
+        st.subheader("LLM Input")
+        file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
+        readme = st.session_state.repo_info.get("readme", "")
+        llm_input = (
+            f"<filetree>\n{file_tree}\n</filetree>\n\n<readme>\n{readme}\n</readme>"
+        )
+        st.code(llm_input, language=None)
     else:
         st.caption("No repository data yet.")
 

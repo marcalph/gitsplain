@@ -3,6 +3,9 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from loguru import logger
+
+from gitsplain.services.ast import EXTENSION_TO_LANGUAGE, ASTParser
 from gitsplain.services.github import GitHubClient
 
 
@@ -56,41 +59,61 @@ class DiagramGenerator:
         }
         return self.state.repo_info
 
-    def phase1_static_analysis(self) -> dict[str, Any]:
-        """Phase 1: Perform static analysis on the codebase."""
-        # Mock data
+    def phase1_static_analysis(self, max_files: int = 50) -> dict[str, Any]:
+        """Phase 1: Perform static analysis using AST parsing."""
+        parser = ASTParser()
+        file_tree = self.state.repo_info.get("file_tree", [])
+
+        # Filter to parseable files
+        parseable_files = [
+            f
+            for f in file_tree
+            if any(f.endswith(ext) for ext in EXTENSION_TO_LANGUAGE)
+        ]
+        logger.info(f"Found {len(parseable_files)} parseable files")
+
+        # Limit files to avoid too many API calls
+        files_to_parse = parseable_files[:max_files]
+        if len(parseable_files) > max_files:
+            logger.warning(
+                f"Limiting to {max_files} files (skipping {len(parseable_files) - max_files})"
+            )
+
+        # Fetch file contents
+        file_contents = self.github.get_files_content(
+            self.state.owner, self.state.repo, files_to_parse
+        )
+
+        # Parse files and extract symbols
+        all_symbols = parser.extract_from_files(file_contents)
+
+        # Build output structure with symbol names as keys
+        files_analysis = {}
+        for path, symbols in all_symbols.items():
+            file_symbols = {}
+            for c in symbols.classes:
+                file_symbols[c.name] = {
+                    "kind": c.kind,
+                    "line": c.line,
+                    "docstring": c.docstring,
+                }
+            for f in symbols.functions:
+                file_symbols[f.name] = {
+                    "kind": f.kind,
+                    "line": f.line,
+                    "docstring": f.docstring,
+                }
+            files_analysis[path] = {
+                "language": symbols.language,
+                "symbols": file_symbols,
+            }
+
         self.state.static_analysis = {
-            "languages": {"Python": 85, "YAML": 10, "Markdown": 5},
-            "frameworks_detected": ["FastAPI", "SQLAlchemy", "Pydantic"],
-            "entry_points": ["src/main.py"],
-            "key_modules": [
-                {
-                    "path": "src/api/routes.py",
-                    "type": "API Routes",
-                    "imports": ["fastapi", "src.services.auth", "src.models.user"],
-                },
-                {
-                    "path": "src/services/database.py",
-                    "type": "Database Service",
-                    "imports": ["sqlalchemy", "src.models"],
-                },
-                {
-                    "path": "src/services/auth.py",
-                    "type": "Authentication",
-                    "imports": ["jwt", "src.models.user"],
-                },
-            ],
-            "dependency_graph": {
-                "src/api/routes.py": ["src/services/auth.py", "src/models/user.py"],
-                "src/services/auth.py": [
-                    "src/models/user.py",
-                    "src/services/database.py",
-                ],
-                "src/services/database.py": [
-                    "src/models/user.py",
-                    "src/models/post.py",
-                ],
-            },
+            "languages": self.state.repo_info.get("languages", {}),
+            "files_parsed": len(all_symbols),
+            "total_classes": sum(len(s.classes) for s in all_symbols.values()),
+            "total_functions": sum(len(s.functions) for s in all_symbols.values()),
+            "files": files_analysis,
         }
         return self.state.static_analysis
 
