@@ -1,14 +1,18 @@
 """LLM client using OpenAI."""
 
-import os
 import json
+import os
 import re
-from typing import Generator, Optional, TypeVar, Type
+from typing import Any, Generator, TypeVar
+
+from loguru import logger
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
-from loguru import logger
 
 T = TypeVar("T", bound=BaseModel)
+
+# Type alias for chat messages (compatible with OpenAI API)
+ChatMessage = dict[str, Any]
 
 
 class LLMClient:
@@ -16,12 +20,14 @@ class LLMClient:
 
     STRUCTURED_OUTPUT_MODELS = {"gpt-4o-mini", "gpt-4o"}
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self.model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
         self._client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         logger.debug(f"LLMClient initialized: {self.model_name}")
 
-    def _build_messages(self, system_prompt: str, data: dict) -> list[dict]:
+    def _build_messages(
+        self, system_prompt: str, data: dict[str, str]
+    ) -> list[ChatMessage]:
         """Build messages array from system prompt and data."""
         parts = [f"<{k}>\n{v}\n</{k}>" for k, v in data.items()]
         return [
@@ -32,7 +38,7 @@ class LLMClient:
     def call_api(
         self,
         system_prompt: str,
-        data: dict,
+        data: dict[str, str],
     ) -> str:
         """Make a non-streaming API call."""
         messages = self._build_messages(system_prompt, data)
@@ -51,7 +57,7 @@ class LLMClient:
     def call_api_stream(
         self,
         system_prompt: str,
-        data: dict,
+        data: dict[str, str],
     ) -> Generator[str, None, None]:
         """Make a streaming API call."""
         messages = self._build_messages(system_prompt, data)
@@ -69,8 +75,8 @@ class LLMClient:
     def call_api_structured(
         self,
         system_prompt: str,
-        data: dict,
-        response_model: Type[T],
+        data: dict[str, str],
+        response_model: type[T],
     ) -> T:
         """Make an API call expecting structured JSON response."""
         schema = response_model.model_json_schema()
@@ -92,15 +98,24 @@ class LLMClient:
             )
             content = response.choices[0].message.content
         else:
-            messages[0]["content"] += (
-                f"\n\nRespond with valid JSON matching this schema:\n```json\n{json.dumps(schema, indent=2)}\n```"
-            )
+            # Add schema to system prompt for non-structured models
+            schema_suffix = f"\n\nRespond with valid JSON matching this schema:\n```json\n{json.dumps(schema, indent=2)}\n```"
+            messages = [
+                {
+                    "role": "system",
+                    "content": str(messages[0]["content"]) + schema_suffix,
+                },
+                messages[1],
+            ]
             logger.info(f"LLM structured | model={self.model_name}")
             response = self._client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
             )
-            content = self._extract_json(response.choices[0].message.content)
+            raw_content = response.choices[0].message.content
+            if not raw_content:
+                raise ValueError("No content returned from LLM")
+            content = self._extract_json(raw_content)
 
         if not content:
             raise ValueError("No content returned from LLM")
