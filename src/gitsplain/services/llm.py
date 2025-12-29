@@ -1,12 +1,11 @@
-"""LLM client using OpenAI."""
+"""LLM client using LangChain with OpenAI."""
 
-import json
 import os
-import re
-from typing import Any, Generator, TypeVar
+from typing import Any, Generator, TypeVar, cast
 
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 from loguru import logger
-from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
@@ -16,27 +15,29 @@ ChatMessage = dict[str, Any]
 
 
 class LLMClient:
-    """LLM client for OpenAI models."""
-
-    STRUCTURED_OUTPUT_MODELS = {"gpt-4o-mini", "gpt-4o"}
+    """LLM client using LangChain abstractions."""
 
     def __init__(self, api_key: str | None = None):
         self.model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self._client = OpenAI(
-            api_key=api_key or os.getenv("OPENAI_API_KEY"),
-            organization=None,  # Ignore OPENAI_ORG_ID env var
+        self._client = ChatOpenAI(
+            model=self.model_name,  # type: ignore[call-arg]
+            temperature=0,
+            api_key=api_key or os.getenv("OPENAI_API_KEY"),  # type: ignore[call-arg]
         )
         logger.debug(f"LLMClient initialized: {self.model_name}")
 
-    def _build_messages(
+    def _build_prompt(
         self, system_prompt: str, data: dict[str, str]
-    ) -> list[ChatMessage]:
-        """Build messages array from system prompt and data."""
-        parts = [f"<{k}>\n{v}\n</{k}>" for k, v in data.items()]
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "\n\n".join(parts)},
-        ]
+    ) -> ChatPromptTemplate:
+        """Build a ChatPromptTemplate from system prompt and data."""
+        parts = [f"<{k}>\n{{{k}}}\n</{k}>" for k in data.keys()]
+        user_template = "\n\n".join(parts)
+        return ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("user", user_template),
+            ]
+        )
 
     def call_api(
         self,
@@ -44,18 +45,16 @@ class LLMClient:
         data: dict[str, str],
     ) -> str:
         """Make a non-streaming API call."""
-        messages = self._build_messages(system_prompt, data)
+        prompt = self._build_prompt(system_prompt, data)
+        chain = prompt | self._client
 
         logger.info(f"LLM call | model={self.model_name}")
-        response = self._client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-        )
+        response = chain.invoke(data)
 
-        content = response.choices[0].message.content
+        content = response.content
         if not content:
             raise ValueError("No content returned from LLM")
-        return content
+        return str(content)
 
     def call_api_stream(
         self,
@@ -63,17 +62,13 @@ class LLMClient:
         data: dict[str, str],
     ) -> Generator[str, None, None]:
         """Make a streaming API call."""
-        messages = self._build_messages(system_prompt, data)
+        prompt = self._build_prompt(system_prompt, data)
+        chain = prompt | self._client
 
         logger.info(f"LLM stream | model={self.model_name}")
-        stream = self._client.chat.completions.create(
-            model=self.model_name,
-            messages=messages,
-            stream=True,
-        )
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        for chunk in chain.stream(data):
+            if chunk.content:
+                yield str(chunk.content)
 
     def call_api_structured(
         self,
@@ -82,69 +77,19 @@ class LLMClient:
         response_model: type[T],
     ) -> T:
         """Make an API call expecting structured JSON response."""
-        schema = response_model.model_json_schema()
-        messages = self._build_messages(system_prompt, data)
+        prompt = self._build_prompt(system_prompt, data)
+        structured_llm = self._client.with_structured_output(response_model)
+        chain = prompt | structured_llm
 
-        if self.model_name in self.STRUCTURED_OUTPUT_MODELS:
-            logger.info(f"LLM structured | model={self.model_name}")
-            response = self._client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": response_model.__name__,
-                        "strict": False,
-                        "schema": schema,
-                    },
-                },
-            )
-            content = response.choices[0].message.content
-        else:
-            # Add schema to system prompt for non-structured models
-            schema_suffix = f"\n\nRespond with valid JSON matching this schema:\n```json\n{json.dumps(schema, indent=2)}\n```"
-            messages = [
-                {
-                    "role": "system",
-                    "content": str(messages[0]["content"]) + schema_suffix,
-                },
-                messages[1],
-            ]
-            logger.info(f"LLM structured | model={self.model_name}")
-            response = self._client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-            )
-            raw_content = response.choices[0].message.content
-            if not raw_content:
-                raise ValueError("No content returned from LLM")
-            content = self._extract_json(raw_content)
-
-        if not content:
-            raise ValueError("No content returned from LLM")
-
+        logger.info(f"LLM structured | model={self.model_name}")
         try:
-            return response_model.model_validate_json(content)
+            response = chain.invoke(data)
+            if response is None:
+                raise ValueError("No content returned from LLM")
+            return cast(T, response)
         except ValidationError as e:
             logger.error(f"Parse failed: {e}")
             raise ValueError(f"Invalid response format: {e}")
-
-    def _extract_json(self, content: str) -> str:
-        """Extract JSON from markdown code blocks or raw text."""
-        # Try code blocks first
-        if match := re.search(r"```(?:json)?\s*([\s\S]*?)```", content):
-            return match.group(1).strip()
-
-        # Find raw JSON object
-        if "{" in content:
-            start = content.find("{")
-            depth = 0
-            for i, c in enumerate(content[start:], start):
-                depth += (c == "{") - (c == "}")
-                if depth == 0:
-                    return content[start : i + 1]
-
-        return content.strip()
 
 
 if __name__ == "__main__":
