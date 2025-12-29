@@ -110,11 +110,48 @@ class FileSymbols:
         return not self.classes and not self.functions
 
 
+# Test directory patterns (case-insensitive)
+TEST_DIR_PATTERNS = {"test", "tests", "__tests__", "spec", "specs", "testing"}
+
+# Test file patterns by extension
+TEST_FILE_PATTERNS: dict[str, list[str]] = {
+    ".py": ["test_", "_test.py", "conftest.py"],
+    ".js": [".test.js", ".spec.js", "_test.js"],
+    ".jsx": [".test.jsx", ".spec.jsx"],
+    ".ts": [".test.ts", ".spec.ts", "_test.ts"],
+    ".tsx": [".test.tsx", ".spec.tsx"],
+    ".go": ["_test.go"],
+    ".rs": ["_test.rs"],
+    ".java": ["Test.java", "Tests.java"],
+    ".kt": ["Test.kt", "Tests.kt"],
+    ".rb": ["_spec.rb", "_test.rb"],
+    ".php": ["Test.php", "Tests.php"],
+    ".cs": ["Tests.cs", "Test.cs"],
+    ".swift": ["Tests.swift", "Test.swift"],
+    ".scala": ["Test.scala", "Spec.scala"],
+}
+
+
 class ASTParser:
     """Parses source files and extracts code symbols using tree-sitter."""
 
     def __init__(self):
         self._parsers: dict[str, Any] = {}
+
+    def _is_test_file(self, file_path: str) -> bool:
+        """Check if a file is a test file based on path and naming conventions."""
+        path = Path(file_path)
+
+        # Check if any parent directory is a test directory
+        for part in path.parts:
+            if part.lower() in TEST_DIR_PATTERNS:
+                return True
+
+        # Check filename patterns based on extension
+        name = path.name
+        ext = path.suffix.lower()
+        patterns = TEST_FILE_PATTERNS.get(ext, [])
+        return any(name.endswith(p) or name.startswith(p.lstrip(".")) for p in patterns)
 
     def _get_parser(self, language: str):
         """Get or create a parser for the given language."""
@@ -315,18 +352,23 @@ class ASTParser:
                     break  # Only check first non-trivial statement
         return None
 
-    def extract_from_files(self, files: dict[str, str]) -> dict[str, FileSymbols]:
+    def extract_from_files(
+        self, files: dict[str, str], exclude_tests: bool = True
+    ) -> dict[str, FileSymbols]:
         """
         Extract symbols from multiple files.
 
         Args:
             files: Dict mapping file paths to their content
+            exclude_tests: Whether to skip test files (default True)
 
         Returns:
             Dict mapping file paths to their extracted symbols
         """
         results = {}
         for path, content in files.items():
+            if exclude_tests and self._is_test_file(path):
+                continue
             symbols = self.extract_symbols(content, path)
             if symbols and not symbols.is_empty:
                 results[path] = symbols
