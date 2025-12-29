@@ -1,17 +1,13 @@
 """LLM client using LangChain with OpenAI."""
 
 import os
-from typing import Any, Generator, TypeVar, cast
+from collections.abc import Iterator
+from typing import cast
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from loguru import logger
 from pydantic import BaseModel, ValidationError
-
-T = TypeVar("T", bound=BaseModel)
-
-# Type alias for chat messages (compatible with OpenAI API)
-ChatMessage = dict[str, Any]
 
 
 class LLMClient:
@@ -30,7 +26,7 @@ class LLMClient:
         self, system_prompt: str, data: dict[str, str]
     ) -> ChatPromptTemplate:
         """Build a ChatPromptTemplate from system prompt and data."""
-        parts = [f"<{k}>\n{{{k}}}\n</{k}>" for k in data.keys()]
+        parts = [f"<{k}>\n{{{k}}}\n</{k}>" for k in data]
         user_template = "\n\n".join(parts)
         return ChatPromptTemplate.from_messages(
             [
@@ -39,11 +35,7 @@ class LLMClient:
             ]
         )
 
-    def call_api(
-        self,
-        system_prompt: str,
-        data: dict[str, str],
-    ) -> str:
+    def call_api(self, system_prompt: str, data: dict[str, str]) -> str:
         """Make a non-streaming API call."""
         prompt = self._build_prompt(system_prompt, data)
         chain = prompt | self._client
@@ -57,10 +49,8 @@ class LLMClient:
         return str(content)
 
     def call_api_stream(
-        self,
-        system_prompt: str,
-        data: dict[str, str],
-    ) -> Generator[str, None, None]:
+        self, system_prompt: str, data: dict[str, str]
+    ) -> Iterator[str]:
         """Make a streaming API call."""
         prompt = self._build_prompt(system_prompt, data)
         chain = prompt | self._client
@@ -70,7 +60,7 @@ class LLMClient:
             if chunk.content:
                 yield str(chunk.content)
 
-    def call_api_structured(
+    def call_api_structured[T: BaseModel](
         self,
         system_prompt: str,
         data: dict[str, str],
