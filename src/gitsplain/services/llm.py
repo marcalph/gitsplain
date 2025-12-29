@@ -26,11 +26,13 @@ class LLMClient:
         self, system_prompt: str, data: dict[str, str]
     ) -> ChatPromptTemplate:
         """Build a ChatPromptTemplate from system prompt and data."""
+        # Escape curly braces in system prompt (e.g. JSON examples)
+        escaped_system = system_prompt.replace("{", "{{").replace("}", "}}")
         parts = [f"<{k}>\n{{{k}}}\n</{k}>" for k in data]
         user_template = "\n\n".join(parts)
         return ChatPromptTemplate.from_messages(
             [
-                ("system", system_prompt),
+                ("system", escaped_system),
                 ("user", user_template),
             ]
         )
