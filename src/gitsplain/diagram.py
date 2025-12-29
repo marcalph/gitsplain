@@ -7,7 +7,7 @@ from typing import Any, Optional
 from loguru import logger
 
 from gitsplain.prompts.mapping import MAPPING_PROMPT_STRUCTURED, MappingResponse
-from gitsplain.services.ast import EXTENSION_TO_LANGUAGE, ASTParser
+from gitsplain.services.ast_parser import EXTENSION_TO_LANGUAGE, ASTParser
 from gitsplain.services.github import GitHubClient
 from gitsplain.services.llm import LLMClient
 

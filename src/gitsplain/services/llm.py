@@ -22,7 +22,10 @@ class LLMClient:
 
     def __init__(self, api_key: str | None = None):
         self.model_name = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        self._client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
+        self._client = OpenAI(
+            api_key=api_key or os.getenv("OPENAI_API_KEY"),
+            organization=None,  # Ignore OPENAI_ORG_ID env var
+        )
         logger.debug(f"LLMClient initialized: {self.model_name}")
 
     def _build_messages(
