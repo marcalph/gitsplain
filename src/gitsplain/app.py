@@ -108,7 +108,25 @@ with tab_repo_analysis:
 
         st.subheader("Static Analysis (AST)")
         if st.session_state.static_analysis:
-            st.json(st.session_state.static_analysis)
+            analysis = st.session_state.static_analysis
+            symbol_list = analysis.get("symbols", [])
+            st.json(
+                {
+                    "languages": analysis.get("languages", {}),
+                    "files_parsed": analysis.get("files_parsed", 0),
+                    "total_classes": analysis.get("total_classes", 0),
+                    "total_functions": analysis.get("total_functions", 0),
+                    "symbols": [
+                        {
+                            "name": s.name,
+                            "kind": s.kind,
+                            "filepath": s.filepath,
+                            "line": s.line,
+                        }
+                        for s in symbol_list
+                    ],
+                }
+            )
 
         st.subheader("LLM Input")
         if st.session_state.repo_info:
@@ -116,8 +134,19 @@ with tab_repo_analysis:
             readme = st.session_state.repo_info.get("readme", "")
             symbols = ""
             if st.session_state.static_analysis:
-                symbols_data = st.session_state.static_analysis.get("files", {})
-                symbols = json.dumps(symbols_data, indent=2)
+                symbol_list = st.session_state.static_analysis.get("symbols", [])
+                symbols = json.dumps(
+                    [
+                        {
+                            "name": s.name,
+                            "kind": s.kind,
+                            "filepath": s.filepath,
+                            "line": s.line,
+                        }
+                        for s in symbol_list
+                    ],
+                    indent=2,
+                )
             llm_input = (
                 f"<filetree>\n{file_tree}\n</filetree>\n\n"
                 f"<symbols>\n{symbols}\n</symbols>\n\n"

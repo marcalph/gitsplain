@@ -93,33 +93,16 @@ class DiagramGenerator:
         # Parse files and extract symbols
         all_symbols = parser.extract_from_files(file_contents)
 
-        # Build output structure with symbol names as keys
-        files_analysis = {}
-        for path, symbols in all_symbols.items():
-            file_symbols = {}
-            for c in symbols.classes:
-                file_symbols[c.name] = {
-                    "kind": c.kind,
-                    "line": c.line,
-                    "docstring": c.docstring,
-                }
-            for f in symbols.functions:
-                file_symbols[f.name] = {
-                    "kind": f.kind,
-                    "line": f.line,
-                    "docstring": f.docstring,
-                }
-            files_analysis[path] = {
-                "language": symbols.language,
-                "symbols": file_symbols,
-            }
+        total_classes = sum(1 for s in all_symbols if s.kind != "function")
+        total_functions = sum(1 for s in all_symbols if s.kind == "function")
+        files_parsed = len(set(s.filepath for s in all_symbols))
 
         self.state.static_analysis = {
             "languages": self.state.repo_info.get("languages", {}),
-            "files_parsed": len(all_symbols),
-            "total_classes": sum(len(s.classes) for s in all_symbols.values()),
-            "total_functions": sum(len(s.functions) for s in all_symbols.values()),
-            "files": files_analysis,
+            "files_parsed": files_parsed,
+            "total_classes": total_classes,
+            "total_functions": total_functions,
+            "symbols": all_symbols,
         }
         return self.state.static_analysis
 
@@ -128,7 +111,19 @@ class DiagramGenerator:
         # Prepare data for LLM
         file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
         readme = self.state.repo_info.get("readme", "")
-        symbols = json.dumps(self.state.static_analysis.get("files", {}), indent=2)
+        symbol_list = self.state.static_analysis.get("symbols", [])
+        symbols = json.dumps(
+            [
+                {
+                    "name": s.name,
+                    "kind": s.kind,
+                    "filepath": s.filepath,
+                    "line": s.line,
+                }
+                for s in symbol_list
+            ],
+            indent=2,
+        )
 
         # Call LLM with structured output
         response = self.llm.call_api_structured(

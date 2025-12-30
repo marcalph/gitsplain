@@ -1,6 +1,6 @@
 """AST parsing service using tree-sitter for extracting code symbols."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,7 +43,7 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".scala": "scala",
 }
 
-# Tree-sitter node types for classes/structs by language
+# Tree-sitter node types for classes/structs/interfaces by language
 CLASS_NODE_TYPES: dict[str, set[str]] = {
     "python": {"class_definition"},
     "javascript": {"class_declaration"},
@@ -54,13 +54,13 @@ CLASS_NODE_TYPES: dict[str, set[str]] = {
     },
     "tsx": {"class_declaration", "interface_declaration", "type_alias_declaration"},
     "go": {"type_declaration"},  # for struct types
-    "rust": {"struct_item", "enum_item", "trait_item", "impl_item"},
-    "java": {"class_declaration", "interface_declaration", "enum_declaration"},
+    "rust": {"struct_item", "trait_item"},
+    "java": {"class_declaration", "interface_declaration"},
     "kotlin": {"class_declaration", "object_declaration", "interface_declaration"},
-    "c": {"struct_specifier", "enum_specifier", "type_definition"},
-    "cpp": {"class_specifier", "struct_specifier", "enum_specifier"},
+    "c": {"struct_specifier"},
+    "cpp": {"class_specifier", "struct_specifier"},
     "c_sharp": {"class_declaration", "interface_declaration", "struct_declaration"},
-    "ruby": {"class", "module"},
+    "ruby": {"class"},
     "php": {"class_declaration", "interface_declaration", "trait_declaration"},
     "swift": {"class_declaration", "struct_declaration", "protocol_declaration"},
     "scala": {"class_definition", "object_definition", "trait_definition"},
@@ -88,26 +88,14 @@ FUNCTION_NODE_TYPES: dict[str, set[str]] = {
 
 @dataclass
 class Symbol:
-    """A code symbol (class, function, etc.)."""
+    """A code symbol (class, struct, interface, or function)."""
 
     name: str
-    kind: str  # "class", "function", "interface", "struct", etc.
+    kind: str  # "class", "struct", "interface", or "function"
     line: int
-    docstring: str | None = None
-
-
-@dataclass
-class FileSymbols:
-    """Symbols extracted from a single file."""
-
-    path: str
+    filepath: str
     language: str
-    classes: list[Symbol] = field(default_factory=list)
-    functions: list[Symbol] = field(default_factory=list)
-
-    @property
-    def is_empty(self) -> bool:
-        return not self.classes and not self.functions
+    docstring: str | None = None
 
 
 # Test directory patterns (case-insensitive)
@@ -133,7 +121,7 @@ TEST_FILE_PATTERNS: dict[str, list[str]] = {
 
 
 class ASTParser:
-    """Parses source files and extracts code symbols using tree-sitter."""
+    """Parses source files and extracts code symbols."""
 
     def __init__(self):
         self._parsers: dict[str, Any] = {}
@@ -170,9 +158,9 @@ class ASTParser:
 
     def extract_symbols(
         self, content: str, file_path: str, language: str | None = None
-    ) -> FileSymbols | None:
+    ) -> list[Symbol]:
         """
-        Extract classes and functions from source code.
+        Extract classes, structs, interfaces, and functions from source code.
 
         Args:
             content: Source code content
@@ -180,25 +168,24 @@ class ASTParser:
             language: Tree-sitter language name (auto-detected if not provided)
 
         Returns:
-            FileSymbols with extracted classes and functions, or None if parsing failed
+            List of extracted symbols, empty if parsing failed
         """
-        # Detect language if not provided
         if not language:
             language = self.detect_language(file_path)
             if not language:
-                return None
+                return []
 
         parser = self._get_parser(language)
         if not parser:
-            return None
+            return []
 
         try:
             tree = parser.parse(content.encode("utf-8"))
         except Exception as e:
             logger.warning(f"Failed to parse {file_path}: {e}")
-            return None
+            return []
 
-        result = FileSymbols(path=file_path, language=language)
+        symbols: list[Symbol] = []
 
         class_types = CLASS_NODE_TYPES.get(language, set())
         function_types = FUNCTION_NODE_TYPES.get(language, set())
@@ -206,23 +193,25 @@ class ASTParser:
         self._walk_tree(
             tree.root_node,
             content,
+            file_path,
             language,
             class_types,
             function_types,
-            result,
+            symbols,
             depth=0,
         )
 
-        return result
+        return symbols
 
     def _walk_tree(
         self,
         node,
         content: str,
+        file_path: str,
         language: str,
         class_types: set[str],
         function_types: set[str],
-        result: FileSymbols,
+        symbols: list[Symbol],
         depth: int,
     ):
         """Recursively walk the AST and extract symbols."""
@@ -231,25 +220,34 @@ class ASTParser:
             return
 
         if node.type in class_types:
-            symbol = self._extract_symbol(node, content, language, "class")
+            symbol = self._extract_symbol(node, content, file_path, language, "class")
             if symbol:
-                result.classes.append(symbol)
+                symbols.append(symbol)
 
         elif node.type in function_types:
             # Skip nested functions (only get top-level and methods)
             if depth <= 2:
-                symbol = self._extract_symbol(node, content, language, "function")
+                symbol = self._extract_symbol(
+                    node, content, file_path, language, "function"
+                )
                 if symbol:
-                    result.functions.append(symbol)
+                    symbols.append(symbol)
 
-        # Recurse into children
+        # Recurse
         for child in node.children:
             self._walk_tree(
-                child, content, language, class_types, function_types, result, depth + 1
+                child,
+                content,
+                file_path,
+                language,
+                class_types,
+                function_types,
+                symbols,
+                depth + 1,
             )
 
     def _extract_symbol(
-        self, node, content: str, language: str, kind: str
+        self, node, content: str, file_path: str, language: str, kind: str
     ) -> Symbol | None:
         """Extract symbol information from an AST node."""
         name = self._get_name(node, language)
@@ -268,6 +266,8 @@ class ASTParser:
             name=name,
             kind=actual_kind,
             line=node.start_point[0] + 1,  # 1-indexed
+            filepath=file_path,
+            language=language,
             docstring=docstring,
         )
 
@@ -295,24 +295,23 @@ class ASTParser:
     def _normalize_kind(self, node_type: str, default_kind: str) -> str:
         """Normalize the node type to a human-readable kind."""
         kind_map = {
+            # Classes
             "class_definition": "class",
             "class_declaration": "class",
             "class_specifier": "class",
-            "interface_declaration": "interface",
-            "type_alias_declaration": "type",
+            "object_declaration": "class",
+            "object_definition": "class",
+            # Structs
             "struct_specifier": "struct",
             "struct_item": "struct",
             "struct_declaration": "struct",
-            "enum_specifier": "enum",
-            "enum_item": "enum",
-            "enum_declaration": "enum",
-            "trait_item": "trait",
-            "trait_definition": "trait",
-            "protocol_declaration": "protocol",
-            "impl_item": "impl",
-            "object_declaration": "object",
-            "object_definition": "object",
-            "module": "module",
+            "type_declaration": "struct",
+            # Interfaces and equivalents
+            "interface_declaration": "interface",
+            "trait_item": "interface",
+            "trait_definition": "interface",
+            "protocol_declaration": "interface",
+            "type_alias_declaration": "interface",
         }
         return kind_map.get(node_type, default_kind)
 
@@ -354,7 +353,7 @@ class ASTParser:
 
     def extract_from_files(
         self, files: dict[str, str], exclude_tests: bool = True
-    ) -> dict[str, FileSymbols]:
+    ) -> list[Symbol]:
         """
         Extract symbols from multiple files.
 
@@ -363,13 +362,12 @@ class ASTParser:
             exclude_tests: Whether to skip test files (default True)
 
         Returns:
-            Dict mapping file paths to their extracted symbols
+            List of all extracted symbols
         """
-        results = {}
+        all_symbols: list[Symbol] = []
         for path, content in files.items():
             if exclude_tests and self._is_test_file(path):
                 continue
             symbols = self.extract_symbols(content, path)
-            if symbols and not symbols.is_empty:
-                results[path] = symbols
-        return results
+            all_symbols.extend(symbols)
+        return all_symbols

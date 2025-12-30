@@ -73,7 +73,7 @@ class TestDiagramGenerator:
 
             assert "languages" in result
             assert "files_parsed" in result
-            assert "files" in result
+            assert "symbols" in result
             assert generator.state.static_analysis == result
 
     def test_phase1_component_mapping(self):
@@ -87,7 +87,7 @@ class TestDiagramGenerator:
             )
             generator = DiagramGenerator()
             generator.state.repo_info = {"file_tree": [], "readme": ""}
-            generator.state.static_analysis = {"files": {}}
+            generator.state.static_analysis = {"symbols": []}
             result = generator.phase1_component_mapping()
 
             assert isinstance(result, dict)
