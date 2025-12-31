@@ -1,4 +1,4 @@
-"""AST parsing service using tree-sitter for extracting code symbols."""
+"""AST parser for extracting code symbols."""
 
 from dataclasses import dataclass
 from pathlib import Path
