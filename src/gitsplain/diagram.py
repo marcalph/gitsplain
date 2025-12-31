@@ -1,6 +1,5 @@
 """Diagram generator for repository architecture visualization."""
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -112,18 +111,7 @@ class DiagramGenerator:
         file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
         readme = self.state.repo_info.get("readme", "")
         symbol_list = self.state.static_analysis.get("symbols", [])
-        symbols = json.dumps(
-            [
-                {
-                    "name": s.name,
-                    "kind": s.kind,
-                    "filepath": s.filepath,
-                    "line": s.line,
-                }
-                for s in symbol_list
-            ],
-            indent=2,
-        )
+        symbols = "\n".join(str(s) for s in symbol_list)
 
         # Call LLM with structured output
         response = self.llm.call_api_structured(

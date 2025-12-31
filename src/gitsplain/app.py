@@ -1,5 +1,3 @@
-import json
-
 import streamlit as st
 import streamlit.components.v1 as components
 from dotenv import load_dotenv
@@ -116,15 +114,7 @@ with tab_repo_analysis:
                     "files_parsed": analysis.get("files_parsed", 0),
                     "total_classes": analysis.get("total_classes", 0),
                     "total_functions": analysis.get("total_functions", 0),
-                    "symbols": [
-                        {
-                            "name": s.name,
-                            "kind": s.kind,
-                            "filepath": s.filepath,
-                            "line": s.line,
-                        }
-                        for s in symbol_list
-                    ],
+                    "symbols": [str(s) for s in symbol_list],
                 }
             )
 
@@ -135,18 +125,7 @@ with tab_repo_analysis:
             symbols = ""
             if st.session_state.static_analysis:
                 symbol_list = st.session_state.static_analysis.get("symbols", [])
-                symbols = json.dumps(
-                    [
-                        {
-                            "name": s.name,
-                            "kind": s.kind,
-                            "filepath": s.filepath,
-                            "line": s.line,
-                        }
-                        for s in symbol_list
-                    ],
-                    indent=2,
-                )
+                symbols = "\n".join(str(s) for s in symbol_list)
             llm_input = (
                 f"<filetree>\n{file_tree}\n</filetree>\n\n"
                 f"<symbols>\n{symbols}\n</symbols>\n\n"
