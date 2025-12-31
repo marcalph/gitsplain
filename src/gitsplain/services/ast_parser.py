@@ -97,6 +97,12 @@ class Symbol:
     language: str
     docstring: str | None = None
 
+    def __str__(self) -> str:
+        base = f"{self.kind} {self.name} @ {self.filepath}:{self.line}"
+        if self.docstring:
+            return f"{base} - {self.docstring}"
+        return base
+
 
 # Test directory patterns (case-insensitive)
 TEST_DIR_PATTERNS = {"test", "tests", "__tests__", "spec", "specs", "testing"}
