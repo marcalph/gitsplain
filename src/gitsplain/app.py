@@ -99,39 +99,19 @@ with tab_graph:
 
 
 with tab_repo_analysis:
-    if st.session_state.repo_info or st.session_state.static_analysis:
-        st.subheader("Repository Info")
-        if st.session_state.repo_info:
-            st.json(st.session_state.repo_info)
-
-        st.subheader("Static Analysis (AST)")
+    if st.session_state.repo_info:
+        file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
+        readme = st.session_state.repo_info.get("readme", "")
+        symbols = ""
         if st.session_state.static_analysis:
-            analysis = st.session_state.static_analysis
-            symbol_list = analysis.get("symbols", [])
-            st.json(
-                {
-                    "languages": analysis.get("languages", {}),
-                    "files_parsed": analysis.get("files_parsed", 0),
-                    "total_classes": analysis.get("total_classes", 0),
-                    "total_functions": analysis.get("total_functions", 0),
-                    "symbols": [str(s) for s in symbol_list],
-                }
-            )
-
-        st.subheader("LLM Input")
-        if st.session_state.repo_info:
-            file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
-            readme = st.session_state.repo_info.get("readme", "")
-            symbols = ""
-            if st.session_state.static_analysis:
-                symbol_list = st.session_state.static_analysis.get("symbols", [])
-                symbols = "\n".join(str(s) for s in symbol_list)
-            llm_input = (
-                f"<filetree>\n{file_tree}\n</filetree>\n\n"
-                f"<symbols>\n{symbols}\n</symbols>\n\n"
-                f"<readme>\n{readme}\n</readme>"
-            )
-            st.code(llm_input, language=None)
+            symbol_list = st.session_state.static_analysis.get("symbols", [])
+            symbols = "\n".join(str(s) for s in symbol_list)
+        llm_input = (
+            f"<filetree>\n{file_tree}\n</filetree>\n\n"
+            f"<symbols>\n{symbols}\n</symbols>\n\n"
+            f"<readme>\n{readme}\n</readme>"
+        )
+        st.code(llm_input, language=None)
     else:
         st.caption("No repository data yet.")
 
