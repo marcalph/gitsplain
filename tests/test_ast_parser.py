@@ -91,10 +91,10 @@ class MyClass:
         """Test extracting Python function."""
         parser = ASTParser()
         code = '''
-def my_function():
-    """Do something."""
-    pass
-'''
+        def my_function():
+            """Do something."""
+            pass
+        '''
         symbols = parser.extract_symbols(code, "test.py")
         assert len(symbols) == 1
         assert symbols[0].name == "my_function"
