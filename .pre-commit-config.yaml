@@ -1,0 +1,19 @@
+fail_fast: true
+repos:
+- repo: local
+  hooks:
+    - id: ruff-format
+      name: ruff format
+      entry: uv run ruff format
+      language: system
+      types: [file, python]
+    - id: ruff-lint
+      name: ruff lint
+      entry: uv run ruff check --fix
+      language: system
+      types: [file, python]
+    - id: ty
+      name: ty
+      entry: uv run ty check
+      language: system
+      types: [file, python]

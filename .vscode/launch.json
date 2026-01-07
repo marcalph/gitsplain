@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Launch Current File (Integrated Terminal)",
+        "type": "python",
+        "request": "launch",
+        "program": "${file}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}",
+        },
+        "console": "integratedTerminal",
+        "justMyCode": true
+      }
+    ]
+  }
