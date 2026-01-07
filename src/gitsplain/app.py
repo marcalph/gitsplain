@@ -25,6 +25,7 @@ def init_session_state():
         "graph_html": None,
         "repo_info": None,
         "static_analysis": None,
+        "explanation": None,
         "component_mapping": None,
         "graph_structure": None,
     }
@@ -76,17 +77,19 @@ if owner and repo:
                 st.session_state.graph_html = state.graph_html
                 st.session_state.repo_info = state.repo_info
                 st.session_state.static_analysis = state.static_analysis
+                st.session_state.explanation = state.explanation
                 st.session_state.component_mapping = state.component_mapping
                 st.session_state.graph_structure = state.graph_structure
 
 
-# Tabs for graph and phase outputs
-tab_graph, tab_repo_analysis, tab_mapping, tab_graph_struct = st.tabs(
+# Tabs for graph and step outputs
+tab_graph, tab_repo_analysis, tab_explanation, tab_mapping, tab_graph_struct = st.tabs(
     [
         "Graph",
-        "Phase 0: repository analysis",
-        "Phase 1: component mapping",
-        "Phase 2: Graph representation",
+        "Repository Analysis",
+        "Explanation",
+        "Component Mapping",
+        "Graph Structure",
     ]
 )
 
@@ -115,14 +118,20 @@ with tab_repo_analysis:
     else:
         st.caption("No repository data yet.")
 
+with tab_explanation:
+    if st.session_state.explanation:
+        st.subheader("LLM Output")
+        st.code(st.session_state.explanation, language=None)
+    else:
+        st.caption("No explanation generated yet.")
+
 with tab_mapping:
-    if st.session_state.repo_info and st.session_state.static_analysis:
+    if st.session_state.explanation:
         file_tree = "\n".join(st.session_state.repo_info.get("file_tree", []))
-        readme = st.session_state.repo_info.get("readme", "")
         symbol_list = st.session_state.static_analysis.get("symbols", [])
         symbols = "\n".join(str(s) for s in symbol_list)
         llm_input = (
-            f"<explanation>\n{readme}\n</explanation>\n\n"
+            f"<explanation>\n{st.session_state.explanation}\n</explanation>\n\n"
             f"<file_tree>\n{file_tree}\n</file_tree>\n\n"
             f"<symbols>\n{symbols}\n</symbols>"
         )
@@ -137,12 +146,11 @@ with tab_mapping:
 
 
 with tab_graph_struct:
-    if st.session_state.repo_info and st.session_state.component_mapping:
-        readme = st.session_state.repo_info.get("readme", "")
+    if st.session_state.explanation and st.session_state.component_mapping:
         mappings = st.session_state.component_mapping.get("mappings", [])
         component_mapping_str = "\n".join(str(m) for m in mappings)
         llm_input = (
-            f"<explanation>\n{readme}\n</explanation>\n\n"
+            f"<explanation>\n{st.session_state.explanation}\n</explanation>\n\n"
             f"<component_mapping>\n{component_mapping_str}\n</component_mapping>"
         )
         st.code(llm_input, language=None)

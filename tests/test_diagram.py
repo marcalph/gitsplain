@@ -16,6 +16,7 @@ class TestGenerationState:
         assert state.instructions == ""
         assert state.repo_info == {}
         assert state.static_analysis == {}
+        assert state.explanation == ""
         assert state.component_mapping == {}
         assert state.graph_structure == {}
         assert state.graph_html == ""
@@ -76,6 +77,20 @@ class TestDiagramGenerator:
             assert "symbols" in result
             assert generator.state.static_analysis == result
 
+    def test_generate_explanation(self):
+        """Test generate_explanation returns explanation string."""
+        mock_llm = MagicMock()
+        mock_llm.call_api.return_value = "This is the architecture explanation."
+
+        generator = DiagramGenerator(github_client=MagicMock(), llm_client=mock_llm)
+        generator.state.repo_info = {"file_tree": [], "readme": ""}
+        generator.state.static_analysis = {"symbols": []}
+        result = generator.generate_explanation()
+
+        assert isinstance(result, str)
+        assert result == "This is the architecture explanation."
+        assert generator.state.explanation == result
+
     def test_map_components(self):
         """Test map_components returns component mapping."""
         with (
@@ -86,8 +101,9 @@ class TestDiagramGenerator:
                 mappings=[]
             )
             generator = DiagramGenerator()
-            generator.state.repo_info = {"file_tree": [], "readme": ""}
+            generator.state.repo_info = {"file_tree": []}
             generator.state.static_analysis = {"symbols": []}
+            generator.state.explanation = "Test explanation"
             result = generator.map_components()
 
             assert isinstance(result, dict)
@@ -99,7 +115,7 @@ class TestDiagramGenerator:
         mock_llm.call_api_structured.return_value = MagicMock(nodes=[], edges=[])
 
         generator = DiagramGenerator(github_client=MagicMock(), llm_client=mock_llm)
-        generator.state.repo_info = {"readme": ""}
+        generator.state.explanation = "Test explanation"
         generator.state.component_mapping = {"mappings": []}
         result = generator.build_graph()
 
@@ -123,7 +139,7 @@ class TestDiagramGenerator:
         assert generator.state.graph_html == html
 
     def test_run_all(self):
-        """Test run_all executes all phases."""
+        """Test run_all executes all steps."""
         mock_github = MagicMock()
         mock_github.get_repo_data.return_value = {
             "default_branch": "main",
@@ -134,9 +150,10 @@ class TestDiagramGenerator:
         mock_github.get_files_content.return_value = {}
 
         mock_llm = MagicMock()
+        mock_llm.call_api.return_value = "Generated explanation"
         mock_llm.call_api_structured.side_effect = [
-            MagicMock(mappings=[]),  # phase1 response
-            MagicMock(nodes=[], edges=[]),  # phase2 response
+            MagicMock(mappings=[]),
+            MagicMock(nodes=[], edges=[]),
         ]
 
         generator = DiagramGenerator(github_client=mock_github, llm_client=mock_llm)
@@ -147,6 +164,7 @@ class TestDiagramGenerator:
         assert state.instructions == "custom instructions"
         assert state.repo_info != {}
         assert state.static_analysis != {}
+        assert state.explanation == "Generated explanation"
         assert state.component_mapping != {}
         assert state.graph_structure != {}
         assert state.graph_html != ""

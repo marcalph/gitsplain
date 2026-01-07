@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from loguru import logger
 
+from gitsplain.prompts.analysis import ANALYSIS_PROMPT
 from gitsplain.prompts.diagram import GRAPH_PROMPT, GraphResponse
 from gitsplain.prompts.mapping import MAPPING_PROMPT_STRUCTURED, MappingResponse
 from gitsplain.services.ast_parser import EXTENSION_TO_LANGUAGE, ASTParser
@@ -22,6 +23,7 @@ class GenerationState:
     instructions: str = ""
     repo_info: dict[str, Any] = field(default_factory=dict)
     static_analysis: dict[str, Any] = field(default_factory=dict)
+    explanation: str = ""
     component_mapping: dict[str, Any] = field(default_factory=dict)
     graph_structure: dict[str, Any] = field(default_factory=dict)
     graph_html: str = ""
@@ -95,17 +97,34 @@ class DiagramGenerator:
         }
         return self.state.static_analysis
 
+    def generate_explanation(self) -> str:
+        """Generate architectural explanation using LLM."""
+        file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
+        readme = self.state.repo_info.get("readme", "")
+        symbol_list = self.state.static_analysis.get("symbols", [])
+        symbols = "\n".join(str(s) for s in symbol_list)
+
+        response = self.llm.call_api(
+            system_prompt=ANALYSIS_PROMPT,
+            data={
+                "filetree": file_tree,
+                "readme": readme,
+                "symbols": symbols,
+            },
+        )
+        self.state.explanation = response
+        return self.state.explanation
+
     def map_components(self) -> dict[str, Any]:
         """Map files to architectural components using LLM."""
         file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
-        readme = self.state.repo_info.get("readme", "")
         symbol_list = self.state.static_analysis.get("symbols", [])
         symbols = "\n".join(str(s) for s in symbol_list)
 
         response = self.llm.call_api_structured(
             system_prompt=MAPPING_PROMPT_STRUCTURED,
             data={
-                "explanation": readme,
+                "explanation": self.state.explanation,
                 "file_tree": file_tree,
                 "symbols": symbols,
             },
@@ -126,14 +145,13 @@ class DiagramGenerator:
 
     def build_graph(self) -> dict[str, Any]:
         """Build the graph structure using LLM."""
-        readme = self.state.repo_info.get("readme", "")
         mappings = self.state.component_mapping.get("mappings", [])
         component_mapping_str = "\n".join(str(m) for m in mappings)
 
         response = self.llm.call_api_structured(
             system_prompt=GRAPH_PROMPT,
             data={
-                "explanation": readme,
+                "explanation": self.state.explanation,
                 "component_mapping": component_mapping_str,
             },
             response_model=GraphResponse,
@@ -157,6 +175,7 @@ class DiagramGenerator:
         self.state.instructions = instructions
         self.fetch_repo_info(owner, repo)
         self.analyze_symbols()
+        self.generate_explanation()
         self.map_components()
         self.build_graph()
         self.generate_html()
