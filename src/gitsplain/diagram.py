@@ -15,7 +15,7 @@ from gitsplain.services.renderer import MermaidRenderer
 
 @dataclass
 class GenerationState:
-    """Accumulates results through diagram generation phases."""
+    """Accumulates results through diagram generation."""
 
     owner: str = ""
     repo: str = ""
@@ -41,7 +41,7 @@ class DiagramGenerator:
         self.llm = llm_client or LLMClient()
         self.renderer = renderer or MermaidRenderer()
 
-    def phase0_repo_info(self, owner: str, repo: str) -> dict[str, Any]:
+    def fetch_repo_info(self, owner: str, repo: str) -> dict[str, Any]:
         """Fetch repository information from GitHub."""
         self.state.owner = owner
         self.state.repo = repo
@@ -59,7 +59,7 @@ class DiagramGenerator:
         }
         return self.state.repo_info
 
-    def phase0_static_analysis(self, max_files: int = 50) -> dict[str, Any]:
+    def analyze_symbols(self, max_files: int = 50) -> dict[str, Any]:
         """Perform static analysis using AST parsing."""
         parser = ASTParser()
         file_tree = self.state.repo_info.get("file_tree", [])
@@ -95,7 +95,7 @@ class DiagramGenerator:
         }
         return self.state.static_analysis
 
-    def phase1_component_mapping(self) -> dict[str, Any]:
+    def map_components(self) -> dict[str, Any]:
         """Map files to architectural components using LLM."""
         file_tree = "\n".join(self.state.repo_info.get("file_tree", []))
         readme = self.state.repo_info.get("readme", "")
@@ -124,7 +124,7 @@ class DiagramGenerator:
         }
         return self.state.component_mapping
 
-    def phase2_graph_structure(self) -> dict[str, Any]:
+    def build_graph(self) -> dict[str, Any]:
         """Build the graph structure using LLM."""
         readme = self.state.repo_info.get("readme", "")
         mappings = self.state.component_mapping.get("mappings", [])
@@ -153,12 +153,12 @@ class DiagramGenerator:
         return self.state.graph_html
 
     def run_all(self, owner: str, repo: str, instructions: str = "") -> GenerationState:
-        """Run all phases and return the state."""
+        """Run all steps and return the state."""
         self.state.instructions = instructions
-        self.phase0_repo_info(owner, repo)
-        self.phase0_static_analysis()
-        self.phase1_component_mapping()
-        self.phase2_graph_structure()
+        self.fetch_repo_info(owner, repo)
+        self.analyze_symbols()
+        self.map_components()
+        self.build_graph()
         self.generate_html()
         return self.state
 

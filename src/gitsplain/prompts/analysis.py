@@ -8,7 +8,6 @@ You are tasked with explaining to a principal software engineer how to draw the 
 2. The README file of the project, which will be enclosed in <readme> tags in the users message.
 
 
-
 Analyze these components carefully, as they will provide crucial information about the project's structure and purpose. Follow these steps to create an explanation for the principal software engineer:
 
 1. Identify the project type and purpose:
